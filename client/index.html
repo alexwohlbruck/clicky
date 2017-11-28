@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" ng-app>
+	<head>
+		<title>Chat Example</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<style>
+			* {
+				font-family: Roboto, Arial, sans-serif;
+				font-weight: 700;
+				margin: 0;
+				padding: 0;
+			}
+			
+			.tick {
+				display: inline-block;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app" ng-controller="ClickyCtrl">
+			<h3>{{role}}!</h3>
+			<!--<p class="string">{{'O'.repeat(clicky.stringCount)}}</p>-->
+			<div class="ticks">
+				<span class="tick" ng-repeat="i in range(clicky.stringCount)" style="width: calc(100% / 100)">O</span>
+			</div>
+		</div>
+		<script src="/socket.io/socket.io.js"></script>
+		<script src="/js/jquery.min.js"></script>
+		<script src="/js/bootstrap.min.js"></script>
+		<script src="/js/angular.min.js"></script>
+		<script>
+			function ClickyCtrl($scope, $document) {
+				/* global io */
+				var socket = io.connect();
+				$scope.clicky = {};
+				
+				// Global keypress key codes
+				const activationKeys = {
+					create: 79, // 'o'
+					destroy: 8 // 'backspace'
+				};
+
+				socket.on('newGame', ({role, game}) => {
+					setRole(role);
+					$scope.clicky = game;
+					$scope.$apply();
+				});
+				
+				function setRole(role) {
+					$scope.role = role;
+					$scope.$apply();
+					$document.bind('keyup', e => {
+						if (e.keyCode === activationKeys[role]) {
+							$scope.makeMove();
+						}
+					});
+				}
+				
+				socket.on('madeMove', newLength => {
+					$scope.clicky.stringCount = newLength;
+					$scope.$apply();
+				});
+
+				$scope.makeMove = function() {
+					socket.emit('makeMove');
+				};
+				
+				socket.on('gameOver', function({winner, stringCount}) {
+					$scope.clicky.stringCount = stringCount;
+					alert(winner + ' win!');
+				});
+				
+				$scope.range = function(n) {
+					return new Array(n);
+				};
+			}
+		</script>
+	</body>
+</html>
