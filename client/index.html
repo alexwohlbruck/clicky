@@ -1,42 +1,119 @@
 <!doctype html>
-<html lang="en" ng-app>
+<html lang="en" ng-app="clicky">
 	<head>
 		<title>Chat Example</title>
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
 		<style>
 			* {
 				font-family: Roboto, Arial, sans-serif;
 				font-weight: 700;
+			}
+			
+			body {
 				margin: 0;
 				padding: 0;
+			    background-color: #2bfcb6;
+			    overflow: hidden;
+			}
+			
+			.head {
+				text-align: center;
+			}
+			.title {
+				animation: pulse 0.58s infinite;
+			}
+			
+			.ticks {
+				position: absolute;
+				top: 50%;
+				transform: translateY(-50%);
 			}
 			
 			.tick {
+				background-color: #111;
 				display: inline-block;
+				border-radius: 50%;
+				animation: pulse 0.58s infinite;
+			}
+			
+			.tick.ng-enter {
+				transition: .2s;
+				transform: scale(0);
+			}
+			.tick.ng-enter-active {
+				transform: scale(1);
+			}
+			
+			.tick:nth-child(1n) {
+				animation-delay: .2s;
+			}
+			.tick:nth-child(2n) {
+				animation-delay: .4s;
+			}
+			.tick:nth-child(3n) {
+				animation-delay: .6s;
+			}
+			.tick:nth-child(4n) {
+				animation-delay: .8s;
+			}
+			.tick:nth-child(5n) {
+				animation-delay: 1s;
+			}
+			@keyframes pulse {
+				0% {
+					transform: scale(1);
+					opacity: 1;
+				}
+				70% {
+					transform: scale(1.2);
+					opacity: .5;
+				}
+				100% {
+					transform: scale(1);
+					opacity: 1;
+				}
 			}
 		</style>
 	</head>
 	<body>
 		<div id="app" ng-controller="ClickyCtrl">
-			<h3>{{role}}!</h3>
-			<!--<p class="string">{{'O'.repeat(clicky.stringCount)}}</p>-->
-			<div class="ticks">
-				<span class="tick" ng-repeat="i in range(clicky.stringCount)" style="width: calc(100% / 100)">O</span>
+			<div class="head">
+				<h1 class="title">Clicky</h1>
+				<h3 class="role">{{role | capitalize}}!</h3>
 			</div>
+			
+			<div class="ticks">
+				<span
+					class="tick"
+					ng-repeat="i in range(clicky.stringCount) track by $index"
+					style="width: calc(100vw / {{clicky.max}}); height: calc(100vw / {{clicky.max}})">
+				</span>
+			</div>
+			
+			<audio src="https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=bee gees&track=stayin alive" autoplay loop></audio>
 		</div>
 		<script src="/socket.io/socket.io.js"></script>
-		<script src="/js/jquery.min.js"></script>
-		<script src="/js/bootstrap.min.js"></script>
-		<script src="/js/angular.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.6.6/angular.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.6.6/angular-animate.js"></script>
 		<script>
-			function ClickyCtrl($scope, $document) {
-				/* global io */
+			/* global angular, io*/
+			var app = angular.module('clicky', ['ngAnimate']);
+			
+			app.filter('capitalize', function() {
+				return function(input) {
+					return (!!input) ? input.charAt(0).toUpperCase() + input.substr(1).toLowerCase() : '';
+				};
+			});
+			
+			app.controller('ClickyCtrl', function($scope, $document) {
+				
 				var socket = io.connect();
 				$scope.clicky = {};
 				
 				// Global keypress key codes
 				const activationKeys = {
-					create: 79, // 'o'
+					create: 32, // 'spacebar'
 					destroy: 8 // 'backspace'
 				};
 
@@ -49,12 +126,16 @@
 				function setRole(role) {
 					$scope.role = role;
 					$scope.$apply();
-					$document.bind('keyup', e => {
+					$document.bind('keydown', e => {
 						if (e.keyCode === activationKeys[role]) {
 							$scope.makeMove();
 						}
 					});
 				}
+				
+				$document.bind('touchstart', e => {
+					$scope.makeMove();
+				});
 				
 				socket.on('madeMove', newLength => {
 					$scope.clicky.stringCount = newLength;
@@ -73,7 +154,7 @@
 				$scope.range = function(n) {
 					return new Array(n);
 				};
-			}
+			});
 		</script>
 	</body>
 </html>
