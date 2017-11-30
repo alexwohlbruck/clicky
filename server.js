@@ -17,7 +17,7 @@ router.use(express.static(path.resolve(__dirname, 'client')));
 
 class Clicky {
 	constructor(max) {
-		this.max = max || 85
+		this.max = max || 86
 		this.stringCount = this.max / 2;
 	}
 	makeMove(role) {
@@ -50,12 +50,6 @@ var clicky = new Clicky();
 var sockets = [];
 
 io.on('connection', function(socket) {
-	// Set role for new player
-	const roles = sockets.map(s => s.role),
-		  creatorsCount   = roles.filter(role => role == 'create').length,
-		  destroyersCount = roles.filter(role => role == 'destroy').length;
-	
-	socket.role = destroyersCount - creatorsCount < 0 ? 'destroy' : 'create';
 	
 	socket.emit('newGame', {role: socket.role, game: clicky});
 	sockets.push(socket);
@@ -65,7 +59,39 @@ io.on('connection', function(socket) {
 	});
 
 	socket.on('makeMove', () => {
-		clicky.makeMove(socket.role);
+		if (socket.player)
+			clicky.makeMove(socket.player.role);
+	});
+	
+	socket.on('joinGame', data => {
+		
+		const userSocketIndex = sockets.indexOf(socket);
+		
+		if (sockets[userSocketIndex].player && sockets[userSocketIndex].player.id) return false;
+		
+		// Set role for new player
+		const roles = sockets.map(s => s.player).filter(p => !!p).map(p => p.role),
+			  creatorsCount   = roles.filter(role => role == 'create').length,
+			  destroyersCount = roles.filter(role => role == 'destroy').length;
+		
+		const player = {
+			id: (new Date().valueOf().toString() + Math.floor(Math.random() * 100)).substring(4, 15),
+			name: data.playerName.substring(0, 20),
+			role: destroyersCount - creatorsCount < 0 ? 'destroy' : 'create'
+		};
+		
+		sockets[userSocketIndex].player = player;
+		
+		socket.emit('allPlayers', {
+			players: sockets.map(socket => socket.player)
+							.filter(player => !!player)
+							.reduce((map, obj) => {
+								map[obj.id] = obj;
+								return map;
+							}, {}),
+			playerId: player.id
+		});
+		socket.broadcast.emit('newPlayer', player);
 	});
 });
 

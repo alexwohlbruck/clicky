@@ -24,42 +24,19 @@
 				animation: pulse 0.58s infinite;
 			}
 			
-			.ticks {
-				position: absolute;
-				top: 50%;
-				transform: translateY(-50%);
+			.bar {
+				background: black;
+				height: 30px;
 			}
 			
-			.tick {
-				background-color: #111;
-				display: inline-block;
-				border-radius: 50%;
-				animation: pulse 0.58s infinite;
+			.players .destroyers {
+				font-size: 20px;
+			}
+			.players .creators {
+				font-size: 20px;
+				float: right;
 			}
 			
-			.tick.ng-enter {
-				transition: .2s;
-				transform: scale(0);
-			}
-			.tick.ng-enter-active {
-				transform: scale(1);
-			}
-			
-			.tick:nth-child(1n) {
-				animation-delay: .2s;
-			}
-			.tick:nth-child(2n) {
-				animation-delay: .4s;
-			}
-			.tick:nth-child(3n) {
-				animation-delay: .6s;
-			}
-			.tick:nth-child(4n) {
-				animation-delay: .8s;
-			}
-			.tick:nth-child(5n) {
-				animation-delay: 1s;
-			}
 			@keyframes pulse {
 				0% {
 					transform: scale(1);
@@ -80,16 +57,22 @@
 		<div id="app" ng-controller="ClickyCtrl">
 			<div class="head">
 				<h1 class="title">Clicky</h1>
-				<h3 class="role">{{role | capitalize}}!</h3>
+				<h3 class="role" ng-show="playerId">{{players[playerId].role | capitalize}}!</h3>
 			</div>
 			
-			<div class="ticks">
-				<span
-					class="tick"
-					ng-repeat="i in range(clicky.stringCount) track by $index"
-					style="width: calc(100vw / {{clicky.max}}); height: calc(100vw / {{clicky.max}})">
-				</span>
+			<div class="bar" style="width: calc(100% / {{clicky.max}} * {{clicky.stringCount}})"></div>
+			
+			<div class="join-form" ng-show="!playerId">
+				<form ng-submit="joinGame()">
+					<input type="text" ng-model="playerName" value="Name"/>
+					<input type="submit" value="Join game">
+				</form>
 			</div>
+			
+			<p class="players">
+				<span class="destroyers" ng-repeat="(id, player) in players" ng-if="player.role == 'destroy'">Destoyers: {{player.name}}</span>
+				<span class="creators" ng-repeat="(id, player) in players" ng-if="player.role == 'create'">Creators: {{player.name}}</span>
+			</p>
 			
 			<audio src="https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=bee gees&track=stayin alive" autoplay loop></audio>
 		</div>
@@ -108,47 +91,61 @@
 			
 			app.controller('ClickyCtrl', function($scope, $document) {
 				
-				var socket = io.connect();
+				const socket = io.connect();
+				
 				$scope.clicky = {};
+				$scope.players = {};
+				$scope.playerId = null;
 				
 				// Global keypress key codes
-				const activationKeys = {
-					create: 32, // 'spacebar'
-					destroy: 8 // 'backspace'
+				const keys = {
+					makeMove: 32 // 'spacebar'
 				};
 
 				socket.on('newGame', ({role, game}) => {
-					setRole(role);
+					$scope.role = role;
 					$scope.clicky = game;
 					$scope.$apply();
 				});
 				
-				function setRole(role) {
-					$scope.role = role;
+				$scope.joinGame = function() {
+					socket.emit('joinGame', {playerName: $scope.playerName});
+				};
+				
+				socket.on('allPlayers', ({players, playerId}) => {
+					$scope.playerId = playerId;
+					$scope.players = players;
 					$scope.$apply();
-					$document.bind('keydown', e => {
-						if (e.keyCode === activationKeys[role]) {
-							$scope.makeMove();
-						}
-					});
-				}
+					console.log(players);
+				});
+				
+				socket.on('newPlayer', player => {
+					$scope.players[player.id] = player;
+					$scope.$apply();
+				});
+				
+				$document.bind('keydown', e => {
+					if (e.keyCode === keys.makeMove && !event.repeat) {
+						$scope.makeMove();
+					}
+				});
 				
 				$document.bind('touchstart', e => {
 					$scope.makeMove();
-				});
-				
-				socket.on('madeMove', newLength => {
-					$scope.clicky.stringCount = newLength;
-					$scope.$apply();
 				});
 
 				$scope.makeMove = function() {
 					socket.emit('makeMove');
 				};
 				
+				socket.on('madeMove', newLength => {
+					$scope.clicky.stringCount = newLength;
+					$scope.$apply();
+				});
+				
 				socket.on('gameOver', function({winner, stringCount}) {
 					$scope.clicky.stringCount = stringCount;
-					alert(winner + ' win!');
+					// alert(winner + ' win!');
 				});
 				
 				$scope.range = function(n) {
