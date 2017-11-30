@@ -17,8 +17,9 @@ router.use(express.static(path.resolve(__dirname, 'client')));
 
 class Clicky {
 	constructor(max) {
-		this.max = max || 86
+		this.max = max || 86;
 		this.stringCount = this.max / 2;
+		this.evenPlayerCount = true;
 	}
 	makeMove(role) {
 		switch (role) {
@@ -56,10 +57,14 @@ io.on('connection', function(socket) {
 
 	socket.on('disconnect', function () {
 		sockets.splice(sockets.indexOf(socket), 1);
+		
+		if (socket.player)
+			io.sockets.emit('playerLeft', socket.player.id);
+			clicky.evenPlayerCount = !clicky.evenPlayerCount;
 	});
 
 	socket.on('makeMove', () => {
-		if (socket.player)
+		if (socket.player && clicky.evenPlayerCount)
 			clicky.makeMove(socket.player.role);
 	});
 	
@@ -81,6 +86,7 @@ io.on('connection', function(socket) {
 		};
 		
 		sockets[userSocketIndex].player = player;
+		clicky.evenPlayerCount = !clicky.evenPlayerCount;
 		
 		socket.emit('allPlayers', {
 			players: sockets.map(socket => socket.player)

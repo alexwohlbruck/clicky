@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en" ng-app="clicky">
 	<head>
-		<title>Chat Example</title>
+		<title>Clicky</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
 		<style>
@@ -13,7 +13,6 @@
 			body {
 				margin: 0;
 				padding: 0;
-			    background-color: #2bfcb6;
 			    overflow: hidden;
 			}
 			
@@ -25,15 +24,18 @@
 			}
 			
 			.bar {
-				background: black;
 				height: 30px;
+				background-image: url(https://i.imgur.com/YSrjDS7.gif);
+				background-position: center;
+				background-size: contain;
+				transition: ease-out width 50ms;
 			}
 			
 			.players .destroyers {
-				font-size: 20px;
+				display: inline-block;
 			}
 			.players .creators {
-				font-size: 20px;
+				display: inline-block;
 				float: right;
 			}
 			
@@ -69,10 +71,16 @@
 				</form>
 			</div>
 			
-			<p class="players">
-				<span class="destroyers" ng-repeat="(id, player) in players" ng-if="player.role == 'destroy'">Destoyers: {{player.name}}</span>
-				<span class="creators" ng-repeat="(id, player) in players" ng-if="player.role == 'create'">Creators: {{player.name}}</span>
-			</p>
+			<div class="players">
+				<div class="destroyers">
+					<h3>Destroyers</h3>
+					<p ng-repeat="(id, player) in players" ng-if="player.role == 'destroy'">{{player.name}}</p>
+				</div>
+				<div class="creators">
+					<h3>Creators</h3>
+					<p ng-repeat="(id, player) in players" ng-if="player.role == 'create'">{{player.name}}</p>
+				</div>
+			</div>
 			
 			<audio src="https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=bee gees&track=stayin alive" autoplay loop></audio>
 		</div>
@@ -121,6 +129,11 @@
 				
 				socket.on('newPlayer', player => {
 					$scope.players[player.id] = player;
+					$scope.$apply();
+				});
+				
+				socket.on('playerLeft', playerId => {
+					delete $scope.players[playerId];
 					$scope.$apply();
 				});
 				
