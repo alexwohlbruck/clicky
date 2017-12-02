@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "description": "A fun multiplayer game about creation and destruction",
   "scripts": {
-    "start": "nodemon server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "repository": "",
   "author": "Alex Wohlbruck <alexwohlbruck@gmail.com>",

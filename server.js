@@ -1,12 +1,6 @@
-//
-// # SimpleServer
-//
-// A simple chat server using Socket.IO, Express, and Async.
-//
 var http = require('http');
 var path = require('path');
 
-var async = require('async');
 var socketio = require('socket.io');
 var express = require('express');
 var router = express();
@@ -15,15 +9,14 @@ var io = socketio.listen(server);
 
 router.use(express.static(path.resolve(__dirname, 'client')));
 
+const playlist = require('./playlist');
+
 class Clicky {
 	constructor(max) {
 		this.max = max || 86;
 		this.stringCount = this.max / 2;
 		this.evenPlayerCount = true;
-		this.soundtrack = {
-			track: 'stayin alive',
-			artist: 'bee gees'
-		};
+		this.soundtrack = playlist.updateTrack();
 	}
 	makeMove(role) {
 		switch (role) {
@@ -54,47 +47,6 @@ class Clicky {
 var clicky = new Clicky();
 var sockets = [];
 
-const playlist = [{
-	track: 'girl is a queen',
-	artist: 'splash'
-},{
-	track: 'farrah fawcett hair',
-	artist: 'capital cities'
-},{
-	track: 'mr blue sky',
-	artist: 'electric light orchestra'
-},{
-	track: 'oh devil',
-	artist: 'electric guest'
-},{
-	track: 'its tricky',
-	artist: 'run-dmc'
-},{
-	track: 'how i want ya',
-	artist: 'hudson thames'
-},{
-	track: 'champagne',
-	artist: 'ganja white knight'
-},{
-	track: 'takillya',
-	artist: 'vinnie maniscalco'
-},{
-	track: 'in cold blood baauer remix',
-	artist: 'alt-j'
-},{
-	track: 'ongoing thing',
-	artist: '20syl'
-},{
-	track: 'the wild life',
-	artist: 'outasight'
-},{
-	track: 'move',
-	artist: 'saint motel'
-},{
-	track: 'kiss this',
-	artist: 'the struts'
-}];
-
 io.on('connection', function(socket) {
 	
 	socket.emit('newGame', {role: socket.role, game: clicky});
@@ -110,7 +62,7 @@ io.on('connection', function(socket) {
 	});
 
 	socket.on('makeMove', () => {
-		if (socket.player /*&& clicky.evenPlayerCount*/)/////// TODO: Make sure this works and is as efficient as possible
+		if (socket.player /*&& clicky.evenPlayerCount*/) /////// TODO: Make sure this works and is as efficient as possible
 			clicky.makeMove(socket.player.role);
 	});
 	
@@ -147,7 +99,7 @@ io.on('connection', function(socket) {
 	});
 	
 	socket.on('skipTrack', () => {
-		clicky.soundtrack = playlist[Math.floor(Math.random() * playlist.length)];
+		clicky.soundtrack = playlist.updateTrack();
 		io.sockets.emit('updateTrack', clicky.soundtrack);
 	});
 });
