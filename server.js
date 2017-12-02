@@ -58,11 +58,11 @@ io.on('connection', function(socket) {
 		
 		if (socket.player)
 			io.sockets.emit('playerLeft', socket.player.id);
-			clicky.evenPlayerCount = !clicky.evenPlayerCount;
+			clicky.evenPlayerCount = sockets.map(s => s.player).filter(p => !!p).length %2 == 0;
 	});
 
 	socket.on('makeMove', () => {
-		if (socket.player /*&& clicky.evenPlayerCount*/) /////// TODO: Make sure this works and is as efficient as possible
+		if (socket.player && clicky.evenPlayerCount)
 			clicky.makeMove(socket.player.role);
 	});
 	

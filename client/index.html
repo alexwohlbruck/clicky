@@ -37,6 +37,7 @@
 			    background: linear-gradient(to right, #37474f 0%, #37474f 50%, #0091ea 50%, #0091ea 100%);
 			    box-sizing: border-box;
 			    border: 20px #1f282d solid;
+			    border-bottom: 0;
 			}
 			
 			.space-between {
@@ -100,9 +101,6 @@
 			.head {
 				text-align: center;
 			}
-			.title {
-				animation: pulse 0.58s infinite;
-			}
 			
 			.player-name {
 				width: 100%;
@@ -139,24 +137,34 @@
 			
 			.players {
 				background-color: #1f282d;
-				padding: 0 0 20px 20px;
+				padding: 0;
 			}
 			.players .destroyers, .players .creators {
-				padding: 0px 20px;
 				color: white;
 				font-size: 1.5em;
 			}
 			.players .destroyers {
+				padding: 20px 0 0 40px;
 				display: inline-block;
 			}
 			.players .creators {
+				padding: 20px 40px 0 0;
 				display: inline-block;
 				float: right;
+			}
+			
+			.title {
+				background-color: white;
+				padding: 20px 35px 15px 40px;
+			}
+			.title h1 {
+				font-size: 5em;
+				color: black;
 			}
 		</style>
 	</head>
 	<body>
-		<div id="app" ng-controller="ClickyCtrl">
+		<div id="app" ng-controller="ClickyCtrl" ng-cloak>
 			<div class="frame">
 				<div class="info space-between">
 					<div class="white">
@@ -186,7 +194,7 @@
 					</form>
 					
 					<h2 class="center-text-align" ng-show="players[playerId].role">
-						{{players[playerId].role}}
+						{{evenPlayerCount() ? players[playerId].role : 'Waiting for opponent'}}
 					</h2>
 				
 					<div class="bar">
@@ -202,6 +210,7 @@
 					<div class="white">
 						<h3>Destroyers</h3>
 					</div>
+					
 					<div class="right-text-align">
 						<h3>Creators</h3>
 					</div>
@@ -214,6 +223,11 @@
 						{{player.name}}
 					</p>
 				</div>
+				
+				<div class="title">
+					<h1>Clicky</h1>
+				</div>
+				
 				<div class="creators">
 					<p ng-repeat="(id, player) in players" ng-if="player.role == 'create'">
 						{{player.name}}
@@ -265,7 +279,6 @@
 					$scope.playerId = playerId;
 					$scope.players = players;
 					$scope.$apply();
-					console.log(players);
 				});
 				
 				socket.on('newPlayer', player => {
@@ -277,6 +290,10 @@
 					delete $scope.players[playerId];
 					$scope.$apply();
 				});
+				
+				$scope.evenPlayerCount = () => {
+					return Object.keys($scope.players).length % 2 == 0;
+				};
 				
 				$document.bind('keydown', e => {
 					if (e.keyCode === keys.makeMove && !event.repeat) {
@@ -315,12 +332,16 @@
 					socket.emit('skipTrack');
 				};
 				
-				socket.on('updateTrack', ({track, artist}) => {
+				socket.on('updateTrack', (newTrack) => {
+					$scope.updateTrack(newTrack);
+				});
+				
+				$scope.updateTrack = ({track, artist}) => {
 					$scope.track = track;
 					$scope.artist = artist;
 					$scope.trackUrl = 'https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=' + artist + '&track=' + track;
 					$scope.$apply();
-				});
+				};
 			});
 		</script>
 	</body>
