@@ -104,6 +104,29 @@
 				animation: pulse 0.58s infinite;
 			}
 			
+			.player-name {
+				width: 100%;
+				background: none;
+			    border: none;
+			    font-size: 4em;
+			    color: white;
+			}
+			.player-name:focus {
+			    outline: 0;
+			}
+			::-webkit-input-placeholder {
+			  color: white;
+			}
+			::-moz-placeholder {
+			  color: white;
+			}
+			:-ms-input-placeholder {
+			  color: white;
+			}
+			:-moz-placeholder {
+			  color: white;
+			}
+			
 			.bar {
 				background-color: #fff;
 				padding: 10px 0;
@@ -116,9 +139,12 @@
 			
 			.players {
 				background-color: #1f282d;
+				padding: 0 0 20px 20px;
 			}
 			.players .destroyers, .players .creators {
-				padding: 0 20px;
+				padding: 0px 20px;
+				color: white;
+				font-size: 1.5em;
 			}
 			.players .destroyers {
 				display: inline-block;
@@ -135,21 +161,33 @@
 				<div class="info space-between">
 					<div class="white">
 						<p>Spacebar</p>
-						<p class="small-text">Extend segment</p>
+						<p class="small-text">{{players[playerId].role == 'create' ? 'Add' : 'Remove'}} segment</p>
 						<div class="break"></div>
 						<p>Reach the edge</p>
 					</div>
 					<div class="right-text-align">
-						<p>Stayin Alive</p>
-						<p class="small-text">Bee gees</p>
+						<p>{{track}}</p>
+						<p class="small-text">{{artist}}</p>
 						<div class="break"></div>
-						<i class="material-icons">volume_up</i>
-						<i class="material-icons">skip_next</i>
+						<i class="material-icons" ng-click="toggleMute()">{{muted ? 'volume_off' : 'volume_up'}}</i>
+						<i class="material-icons" ng-click="skipTrack()">skip_next</i>
 					</div>
 				</div>
 				
 				<div>
-					<h2 class="center-text-align">{{players[playerId].role || 'create'}}</h2>
+					<form ng-submit="joinGame()">
+						<input
+							type='text'
+							ng-model="playerName"
+							class="player-name center-text-align"
+							ng-show="!players[playerId].role"
+							placeholder="Enter your name"
+							autofocus>
+					</form>
+					
+					<h2 class="center-text-align" ng-show="players[playerId].role">
+						{{players[playerId].role}}
+					</h2>
 				
 					<div class="bar">
 						<div class="progress" style="width: calc(100% / {{clicky.max}} * {{clicky.stringCount}})"></div>
@@ -183,14 +221,7 @@
 				</div>
 			</div>
 			
-			<!--<div class="join-form" ng-show="!playerId">
-				<form ng-submit="joinGame()">
-					<input type="text" ng-model="playerName" value="Name"/>
-					<input type="submit" value="Join game">
-				</form>
-			</div>-->
-			
-			<audio src="https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=bee gees&track=stayin alive" autoplay loop></audio>
+			<audio id="track" ng-src="{{trackUrl}}" autoplay loop></audio>
 		</div>
 		<script src="/socket.io/socket.io.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.6.6/angular.js"></script>
@@ -199,15 +230,16 @@
 			/* global angular, io*/
 			var app = angular.module('clicky', ['ngAnimate']);
 			
-			app.filter('round', function() {
+			app.filter('round', () => {
 				return function(input) {
 					return Math.round(input);
 				};
 			});
 			
-			app.controller('ClickyCtrl', function($scope, $document) {
+			app.controller('ClickyCtrl', ($scope, $document) => {
 				
 				const socket = io.connect();
+				const audio = document.getElementById('track');
 				
 				$scope.clicky = {};
 				$scope.players = {};
@@ -221,10 +253,11 @@
 				socket.on('newGame', ({role, game}) => {
 					$scope.role = role;
 					$scope.clicky = game;
+					$scope.updateTrack(game.soundtrack);
 					$scope.$apply();
 				});
 				
-				$scope.joinGame = function() {
+				$scope.joinGame = () => {
 					socket.emit('joinGame', {playerName: $scope.playerName});
 				};
 				
@@ -255,7 +288,7 @@
 					$scope.makeMove();
 				});
 
-				$scope.makeMove = function() {
+				$scope.makeMove = () => {
 					socket.emit('makeMove');
 				};
 				
@@ -264,14 +297,30 @@
 					$scope.$apply();
 				});
 				
-				socket.on('gameOver', function({winner, stringCount}) {
+				socket.on('gameOver', ({winner, stringCount}) => {
 					$scope.clicky.stringCount = stringCount;
 					// alert(winner + ' win!');
 				});
 				
-				$scope.range = function(n) {
+				$scope.range = (n) => {
 					return new Array(n);
 				};
+				
+				$scope.muted = false;
+				$scope.toggleMute = () => {
+					audio.muted = $scope.muted = !$scope.muted;
+				};
+				
+				$scope.skipTrack = () => {
+					socket.emit('skipTrack');
+				};
+				
+				socket.on('updateTrack', ({track, artist}) => {
+					$scope.track = track;
+					$scope.artist = artist;
+					$scope.trackUrl = 'https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=' + artist + '&track=' + track;
+					$scope.$apply();
+				});
 			});
 		</script>
 	</body>

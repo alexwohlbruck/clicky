@@ -20,6 +20,10 @@ class Clicky {
 		this.max = max || 86;
 		this.stringCount = this.max / 2;
 		this.evenPlayerCount = true;
+		this.soundtrack = {
+			track: 'stayin alive',
+			artist: 'bee gees'
+		};
 	}
 	makeMove(role) {
 		switch (role) {
@@ -50,9 +54,51 @@ class Clicky {
 var clicky = new Clicky();
 var sockets = [];
 
+const playlist = [{
+	track: 'girl is a queen',
+	artist: 'splash'
+},{
+	track: 'farrah fawcett hair',
+	artist: 'capital cities'
+},{
+	track: 'mr blue sky',
+	artist: 'electric light orchestra'
+},{
+	track: 'oh devil',
+	artist: 'electric guest'
+},{
+	track: 'its tricky',
+	artist: 'run-dmc'
+},{
+	track: 'how i want ya',
+	artist: 'hudson thames'
+},{
+	track: 'champagne',
+	artist: 'ganja white knight'
+},{
+	track: 'takillya',
+	artist: 'vinnie maniscalco'
+},{
+	track: 'in cold blood baauer remix',
+	artist: 'alt-j'
+},{
+	track: 'ongoing thing',
+	artist: '20syl'
+},{
+	track: 'the wild life',
+	artist: 'outasight'
+},{
+	track: 'move',
+	artist: 'saint motel'
+},{
+	track: 'kiss this',
+	artist: 'the struts'
+}];
+
 io.on('connection', function(socket) {
 	
 	socket.emit('newGame', {role: socket.role, game: clicky});
+	socket.emit('updateTrack', clicky.soundtrack);
 	sockets.push(socket);
 
 	socket.on('disconnect', function () {
@@ -64,7 +110,7 @@ io.on('connection', function(socket) {
 	});
 
 	socket.on('makeMove', () => {
-		if (socket.player/* && clicky.evenPlayerCount*/)
+		if (socket.player /*&& clicky.evenPlayerCount*/)/////// TODO: Make sure this works and is as efficient as possible
 			clicky.makeMove(socket.player.role);
 	});
 	
@@ -98,6 +144,11 @@ io.on('connection', function(socket) {
 			playerId: player.id
 		});
 		socket.broadcast.emit('newPlayer', player);
+	});
+	
+	socket.on('skipTrack', () => {
+		clicky.soundtrack = playlist[Math.floor(Math.random() * playlist.length)];
+		io.sockets.emit('updateTrack', clicky.soundtrack);
 	});
 });
 
