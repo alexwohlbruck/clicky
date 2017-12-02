@@ -3,17 +3,98 @@
 	<head>
 		<title>Clicky</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+		<link rel="stylesheet" href="fonts/Governor.css" type="text/css">
+		<link rel="stylesheet" href="fonts/Circular.css" type="text/css">
+		<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 		<style>
 			* {
-				font-family: Roboto, Arial, sans-serif;
-				font-weight: 700;
+				font-family: Governor, Product Sans, Arial, sans-serif;
+				font-weight: bold;
+				margin: 0;
+			}
+			
+			html {
+				height: 100%;
 			}
 			
 			body {
-				margin: 0;
-				padding: 0;
+			    height: 100%;
 			    overflow: hidden;
+			}
+			
+			#app {
+				height: 100%;
+				display: flex;
+				flex-direction: column;
+			}
+			
+			.frame {
+				flex: 1;
+			    display: flex;
+			    flex-direction: column;
+			    justify-content: space-between;
+			    background: linear-gradient(to right, #37474f 0%, #37474f 50%, #0091ea 50%, #0091ea 100%);
+			    box-sizing: border-box;
+			    border: 20px #1f282d solid;
+			}
+			
+			.space-between {
+			    display: flex;
+			    justify-content: space-between;
+			    padding: 20px;
+			}
+			
+			.center-text-align	 {
+				text-align: center;
+			}
+			.right-text-align {
+				text-align: right;
+			}
+			
+			/*replace with blend mode*/
+			.white {
+				color: white;
+			}
+			
+			.small-text {
+				font-size: .8em;
+				opacity: .65;
+			}
+			
+			h1 {
+				font-size: 5.5em;
+			    letter-spacing: 12px;
+			    /*mix-blend-mode: screen*/
+			    color: white;
+			}
+			
+			h2 {
+				font-size: 4em;
+			    line-height: 44px;
+			    letter-spacing: 12px;
+			    color: white;
+			}
+			
+			h3 {
+				font-size: 2em;
+				line-height: 22px;
+				letter-spacing: 6px;
+			}
+			
+			p {
+				margin: 3px 0;
+			}
+			.break {
+				height: 5px;
+			}
+			
+			.material-icons {
+				cursor: pointer;
+				font-size: 22pt; 
+			}
+			.material-icons:hover {
+				color: white;
 			}
 			
 			.head {
@@ -24,13 +105,21 @@
 			}
 			
 			.bar {
-				height: 30px;
-				background-image: url(https://i.imgur.com/YSrjDS7.gif);
-				background-position: center;
-				background-size: contain;
-				transition: ease-out width 50ms;
+				background-color: #fff;
+				padding: 10px 0;
+			}
+			.bar .progress {
+				height: 40px;
+				background-color: #e91e63;
+				transition: ease-out all 50ms;
 			}
 			
+			.players {
+				background-color: #1f282d;
+			}
+			.players .destroyers, .players .creators {
+				padding: 0 20px;
+			}
 			.players .destroyers {
 				display: inline-block;
 			}
@@ -38,49 +127,68 @@
 				display: inline-block;
 				float: right;
 			}
-			
-			@keyframes pulse {
-				0% {
-					transform: scale(1);
-					opacity: 1;
-				}
-				70% {
-					transform: scale(1.2);
-					opacity: .5;
-				}
-				100% {
-					transform: scale(1);
-					opacity: 1;
-				}
-			}
 		</style>
 	</head>
 	<body>
 		<div id="app" ng-controller="ClickyCtrl">
-			<div class="head">
-				<h1 class="title">Clicky</h1>
-				<h3 class="role" ng-show="playerId">{{players[playerId].role | capitalize}}!</h3>
+			<div class="frame">
+				<div class="info space-between">
+					<div class="white">
+						<p>Spacebar</p>
+						<p class="small-text">Extend segment</p>
+						<div class="break"></div>
+						<p>Reach the edge</p>
+					</div>
+					<div class="right-text-align">
+						<p>Stayin Alive</p>
+						<p class="small-text">Bee gees</p>
+						<div class="break"></div>
+						<i class="material-icons">volume_up</i>
+						<i class="material-icons">skip_next</i>
+					</div>
+				</div>
+				
+				<div>
+					<h2 class="center-text-align">{{players[playerId].role || 'create'}}</h2>
+				
+					<div class="bar">
+						<div class="progress" style="width: calc(100% / {{clicky.max}} * {{clicky.stringCount}})"></div>
+					</div>
+				</div>
+				
+				<div>
+					<h1 class="center-text-align">{{(clicky.stringCount / clicky.max * 100) | round }}%</h1>
+				</div>
+				
+				<div class="space-between">
+					<div class="white">
+						<h3>Destroyers</h3>
+					</div>
+					<div class="right-text-align">
+						<h3>Creators</h3>
+					</div>
+				</div>
 			</div>
 			
-			<div class="bar" style="width: calc(100% / {{clicky.max}} * {{clicky.stringCount}})"></div>
+			<div class="players space-between">
+				<div class="destroyers">
+					<p ng-repeat="(id, player) in players" ng-if="player.role == 'destroy'">
+						{{player.name}}
+					</p>
+				</div>
+				<div class="creators">
+					<p ng-repeat="(id, player) in players" ng-if="player.role == 'create'">
+						{{player.name}}
+					</p>
+				</div>
+			</div>
 			
-			<div class="join-form" ng-show="!playerId">
+			<!--<div class="join-form" ng-show="!playerId">
 				<form ng-submit="joinGame()">
 					<input type="text" ng-model="playerName" value="Name"/>
 					<input type="submit" value="Join game">
 				</form>
-			</div>
-			
-			<div class="players">
-				<div class="destroyers">
-					<h3>Destroyers</h3>
-					<p ng-repeat="(id, player) in players" ng-if="player.role == 'destroy'">{{player.name}}</p>
-				</div>
-				<div class="creators">
-					<h3>Creators</h3>
-					<p ng-repeat="(id, player) in players" ng-if="player.role == 'create'">{{player.name}}</p>
-				</div>
-			</div>
+			</div>-->
 			
 			<audio src="https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=bee gees&track=stayin alive" autoplay loop></audio>
 		</div>
@@ -91,9 +199,9 @@
 			/* global angular, io*/
 			var app = angular.module('clicky', ['ngAnimate']);
 			
-			app.filter('capitalize', function() {
+			app.filter('round', function() {
 				return function(input) {
-					return (!!input) ? input.charAt(0).toUpperCase() + input.substr(1).toLowerCase() : '';
+					return Math.round(input);
 				};
 			});
 			

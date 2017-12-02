@@ -1,0 +1,32 @@
+@font-face {
+    font-family: 'Circular';
+    src: url('CircularSpUIv3T-Light.eot');
+    src: url('CircularSpUIv3T-Light.eot?#iefix') format('embedded-opentype'),
+        url('CircularSpUIv3T-Light.woff2') format('woff2'),
+        url('CircularSpUIv3T-Light.woff') format('woff'),
+        url('CircularSpUIv3T-Light.ttf') format('truetype');
+    font-weight: lighter;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Circular';
+    src: url('CircularSpUIv3T-Book.eot');
+    src: url('CircularSpUIv3T-Book.eot?#iefix') format('embedded-opentype'),
+        url('CircularSpUIv3T-Book.woff2') format('woff2'),
+        url('CircularSpUIv3T-Book.woff') format('woff'),
+        url('CircularSpUIv3T-Book.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Circular';
+    src: url('CircularSpUIv3T-Bold.eot');
+    src: url('CircularSpUIv3T-Bold.eot?#iefix') format('embedded-opentype'),
+        url('CircularSpUIv3T-Bold.woff2') format('woff2'),
+        url('CircularSpUIv3T-Bold.woff') format('woff'),
+        url('CircularSpUIv3T-Bold.ttf') format('truetype');
+    font-weight: bold;
+    font-style: normal;
+}

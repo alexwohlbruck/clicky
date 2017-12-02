@@ -1,0 +1,10 @@
+@font-face {
+    font-family: 'Governor';
+    src: url('Governor.eot');
+    src: url('Governor.eot?#iefix') format('embedded-opentype'),
+        url('Governor.woff2') format('woff2'),
+        url('Governor.woff') format('woff'),
+        url('Governor.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}

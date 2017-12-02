@@ -64,7 +64,7 @@ io.on('connection', function(socket) {
 	});
 
 	socket.on('makeMove', () => {
-		if (socket.player && clicky.evenPlayerCount)
+		if (socket.player/* && clicky.evenPlayerCount*/)
 			clicky.makeMove(socket.player.role);
 	});
 	
