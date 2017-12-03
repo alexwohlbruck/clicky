@@ -301,9 +301,9 @@
 					}
 				});
 				
-				$document.bind('touchstart', e => {
+				/*$document.bind('touchstart', e => {
 					$scope.makeMove();
-				});
+				});*/
 
 				$scope.makeMove = () => {
 					socket.emit('makeMove');

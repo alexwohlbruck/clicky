@@ -1,4 +1,6 @@
 module.exports = {
+	// https://www.randomlists.com/random-songs
+	// https://codepen.io/bobhami/pen/gwAJNp
 	updateTrack() {
 		return this.tracks[Math.floor(Math.random() * this.tracks.length)];
 	},
@@ -38,5 +40,11 @@ module.exports = {
 	},{
 		track: 'kiss this',
 		artist: 'the struts'
+	},{
+		track: 'get ugly',
+		artist: 'json derulo'
+	},{
+		track: 'hollow life',
+		artist: 'coast modern'
 	}]
 };
