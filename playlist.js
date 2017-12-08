@@ -46,5 +46,8 @@ module.exports = {
 	},{
 		track: 'hollow life',
 		artist: 'coast modern'
+	},{
+		track: 'run boy run',
+		artist: 'woodkid'
 	}]
 };
