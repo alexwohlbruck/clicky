@@ -243,7 +243,7 @@
 			
 			<div class="players space-between">
 				<div class="destroyers">
-					<p ng-repeat="(id, player) in clicky.players" ng-if="me.role == 'destroy'">
+					<p ng-repeat="(id, player) in clicky.players" ng-if="player.role == 'destroy'">
 						{{player.name}}
 					</p>
 				</div>
@@ -253,7 +253,7 @@
 				</div>
 				
 				<div class="creators">
-					<p ng-repeat="(id, player) in clicky.players" ng-if="me.role == 'create'">
+					<p ng-repeat="(id, player) in clicky.players" ng-if="player.role == 'create'">
 						{{player.name}}
 					</p>
 				</div>
