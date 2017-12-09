@@ -216,7 +216,7 @@
 					</form>
 					
 					<h2 class="center-text-align" ng-show="me">
-						{{evenPlayerCount() ? me.role : 'Waiting for opponent'}}
+						{{clicky.evenPlayerCount ? me.role : 'Waiting for opponent'}}
 					</h2>
 				
 					<div class="bar">
@@ -285,7 +285,6 @@
 				});
 				
 				$scope.clicky = {};
-				$scope.players = {};
 				$scope.me = null;
 				
 				// Global keypress key codes
@@ -300,30 +299,20 @@
 				socket.on('gameData', ({game, player}) => {
 					$scope.me = player;
 					$scope.clicky = game;
-					$scope.updateTrack(game.playlist);
-					console.log({game, player});
-					$scope.$apply();
-				});
-				
-				socket.on('allPlayers', ({players, playerId}) => {
-					$scope.playerId = playerId;
-					$scope.players = players;
+					$scope.updateTrack(game.playlist.tracks[game.playlist.index]);
 					$scope.$apply();
 				});
 				
 				socket.on('newPlayer', player => {
-					$scope.players[player.id] = player;
+					$scope.clicky.players.push(player);
 					$scope.$apply();
 				});
 				
 				socket.on('playerLeft', playerId => {
-					delete $scope.me.role
+					const playerIndex = $scope.clicky.players.findIndex(player => player.id == playerId);
+					$scope.clicky.players.splice(playerIndex, 1);
 					$scope.$apply();
 				});
-				
-				$scope.evenPlayerCount = () => {
-					return Object.keys($scope.players).length % 2 == 0;
-				};
 				
 				$document.bind('keydown', e => {
 					if (e.keyCode === keys.makeMove && !event.repeat) {

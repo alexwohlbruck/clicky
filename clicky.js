@@ -28,7 +28,7 @@ class Clicky {
 	}
 	
 	updateTrackIndex() {
-		const index = Math.floor(Math.random() * this.playlist.length);
+		const index = Math.floor(Math.random() * this.playlist.tracks.length);
 		this.playlist.index = index;
 		return index;
 	}

@@ -34,7 +34,9 @@ io.on('connection', function(socket) {
 		}
 		
 		socket.gameId = game.id;
+		socket.player = player;
 		socket.emit('gameData', {game, player});
+		io.sockets.in(game.id).broadcast('newPlayer', player);
 	});
 
 	socket.on('disconnect', function () {
@@ -48,48 +50,32 @@ io.on('connection', function(socket) {
 		// 	clicky.evenPlayerCount = sockets.map(s => s.player).filter(p => !!p).length %2 == 0;
 	});
 
-	/*socket.on('makeMove', () => {
-		if (socket.player && clicky.evenPlayerCount)
-			clicky.makeMove(socket.player.role);
-	});*/
+	socket.on('makeMove', () => {
+		if (!socket.gameId) return;
+		
+		const game = games.find(game => game.id == socket.gameId),
+			  player = game.players.find(player => player.id == socket.id);
+		
+		if (socket.player && game.evenPlayerCount) {
+			game.makeMove(player.role);
+		}
+	});
 	
-	/*socket.on('joinGame', data => {
-		
-		const userSocketIndex = sockets.indexOf(socket);
-		
-		if (sockets[userSocketIndex].player && sockets[userSocketIndex].player.id) return false;
-		
-		// Set role for new player
-		const roles = sockets.map(s => s.player).filter(p => !!p).map(p => p.role),
-			  creatorsCount   = roles.filter(role => role == 'create').length,
-			  destroyersCount = roles.filter(role => role == 'destroy').length;
-		
-		const player = {
-			id: (new Date().valueOf().toString() + Math.floor(Math.random() * 100)).substring(4, 15),
-			name: data.playerName.substring(0, 20),
-			role: destroyersCount - creatorsCount < 0 ? 'destroy' : 'create'
-		};
-		
-		sockets[userSocketIndex].player = player;
-		clicky.evenPlayerCount = !clicky.evenPlayerCount;
-		
-		socket.emit('allPlayers', {
-			players: sockets.map(socket => socket.player)
-							.filter(player => !!player)
-							.reduce((map, obj) => {
-								map[obj.id] = obj;
-								return map;
-							}, {}),
-			playerId: player.id
-		});
-		socket.broadcast.emit('newPlayer', player);
-	});*/
+	/*
+	// Set role for new player
+	// This method ensures that the counts do not get out of sync
+	const roles = sockets.map(s => s.player).filter(p => !!p).map(p => p.role),
+		  creatorsCount   = roles.filter(role => role == 'create').length,
+		  destroyersCount = roles.filter(role => role == 'destroy').length;
+	*/
 	
 	socket.on('skipTrack', () => {
 		const gameId = socket.gameId,
-			  game = games[gameId];
+			  game = games.find(game => game.id == gameId);
 			  
-		io.sockets.in(gameId).emit('updateTrack', game.playlist.tracks[game.updateTrackIndex()]);
+		if (gameId) {
+			io.sockets.in(gameId).emit('updateTrack', game.playlist.tracks[game.updateTrackIndex()]);
+		}
 	});
 });
 
