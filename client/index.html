@@ -224,7 +224,7 @@
 					</div>
 				</div>
 				
-				<div>
+				<div ng-show="clicky.stringCount">
 					<h1 class="center-text-align">{{(clicky.stringCount / clicky.max * 100) | round }}%</h1>
 				</div>
 				
@@ -241,7 +241,7 @@
 			
 			<div class="players space-between">
 				<div class="destroyers">
-					<p ng-repeat="(id, player) in players" ng-if="me.role == 'destroy'">
+					<p ng-repeat="(id, player) in clicky.players" ng-if="me.role == 'destroy'">
 						{{player.name}}
 					</p>
 				</div>
@@ -251,7 +251,7 @@
 				</div>
 				
 				<div class="creators">
-					<p ng-repeat="(id, player) in players" ng-if="me.role == 'create'">
+					<p ng-repeat="(id, player) in clicky.players" ng-if="me.role == 'create'">
 						{{player.name}}
 					</p>
 				</div>
@@ -305,6 +305,7 @@
 				
 				socket.on('newPlayer', player => {
 					$scope.clicky.players.push(player);
+					$scope.clicky.evenPlayerCount = !$scope.clicky.evenPlayerCount;
 					$scope.$apply();
 				});
 				
@@ -333,9 +334,8 @@
 					$scope.$apply();
 				});
 				
-				socket.on('gameOver', ({winner, stringCount}) => {
-					$scope.clicky.stringCount = stringCount;
-					// alert(winner + ' win!');
+				socket.on('gameOver', ({winner}) => {
+					console.log(winner + ' win!');
 				});
 				
 				$scope.range = (n) => {

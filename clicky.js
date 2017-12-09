@@ -1,7 +1,8 @@
 const spotify = require('./spotify.js');
 
 class Clicky {
-	constructor(max) {
+	constructor({emit, max}) {
+		this.emit = emit;
 		this.id = this.generateUniqueId();
 		this.players = [];
 		this.max = max || 86;
@@ -40,7 +41,7 @@ class Clicky {
 		
 		const newPlayer = {
 			id: socket.id,
-			playerName,
+			name: playerName,
 			role: this.evenPlayerCount ? 'create' : 'destroy'
 		};
 		
@@ -48,6 +49,15 @@ class Clicky {
 		this.updateEvenPlayerCount();
 		
 		return newPlayer;
+	}
+	
+	removePlayer(playerId) {
+		const playerIndex = this.players.findIndex(player => player.id == playerId);
+		
+		this.players.splice(playerIndex, 1);
+		this.updateEvenPlayerCount();
+		
+		// TODO: Delete game object if no players are left
 	}
 	
 	updateEvenPlayerCount() {
@@ -72,12 +82,13 @@ class Clicky {
 				}
 				break;
 		}
-		io.sockets.emit('madeMove', this.stringCount);
+		
+		this.emit('madeMove', this.stringCount);
 	}
 	
 	gameOver({winner}) {
 		this.stringCount = this.max / 2;
-		io.sockets.emit('gameOver', {winner, stringCount: this.stringCount});
+		this.emit('gameOver', {winner});
 	}
 }
 
