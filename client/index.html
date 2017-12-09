@@ -6,6 +6,7 @@
 		<link rel="stylesheet" href="fonts/Governor.css" type="text/css">
 		<link rel="stylesheet" href="fonts/Circular.css" type="text/css">
 		<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+		<link rel="shortcut icon" href="img/favicon.ico" type="image/x-icon">
 
 		<style>
 			* {
@@ -195,7 +196,8 @@
 						<div class="break"></div>
 						<p>Reach the edge</p>
 					</div>
-					<div class="right-text-align">
+					
+					<div class="right-text-align" ng-show="clicky.playlist">
 						<p>{{track}}</p>
 						<p class="small-text">{{artist}}</p>
 						<div class="break"></div>
@@ -222,18 +224,18 @@
 					<div class="bar">
 						<div class="progress" style="width: calc(100% / {{clicky.max}} * {{clicky.stringCount}})"></div>
 					</div>
-				</div>
-				
-				<div ng-show="clicky.stringCount">
-					<h1 class="center-text-align">{{(clicky.stringCount / clicky.max * 100) | round }}%</h1>
+					
+					<div ng-show="clicky.stringCount">
+						<h1 class="center-text-align">{{(clicky.stringCount / clicky.max * 100) | round }}%</h1>
+					</div>
 				</div>
 				
 				<div class="space-between">
-					<div class="white">
+					<div class="white"ng-show="clicky.players">
 						<h3>Destroyers</h3>
 					</div>
 					
-					<div class="right-text-align">
+					<div class="right-text-align"ng-show="clicky.players">
 						<h3>Creators</h3>
 					</div>
 				</div>
@@ -384,7 +386,7 @@
 					}
 					
 					const frames = {
-						1: {splashStyle: {display: 'none'}}, // Hide splash for testing
+						// 1: {splashStyle: {display: 'none'}}, // Hide splash for testing
 						
 						0: {textStyle: {fontSize: '20em', visibility: 'visible'}},
 						462: {textStyle: {fontSize: '15em'}},
