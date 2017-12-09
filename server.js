@@ -9,64 +9,39 @@ var io = socketio.listen(server);
 
 router.use(express.static(path.resolve(__dirname, 'client')));
 
-const playlist = require('./playlist');
+//////////////////////////////////////////////////////////////
 
-class Clicky {
-	constructor(max) {
-		this.max = max || 86;
-		this.stringCount = this.max / 2;
-		this.evenPlayerCount = true;
-		this.soundtrack = playlist.updateTrack();
-	}
-	makeMove(role) {
-		switch (role) {
-			case 'create':
-				if (this.stringCount === (this.max - 1)) {
-					this.gameOver({winner: 'creators'});
-				} else {
-					this.stringCount++;
-				}
-				break;
-				
-			case 'destroy':
-				if (this.stringCount === 1) {
-					this.gameOver({winner: 'destroyers'});
-				} else {
-					this.stringCount--;
-				}
-				break;
-		}
-		io.sockets.emit('madeMove', this.stringCount);
-	}
-	gameOver({winner}) {
-		this.stringCount = this.max / 2;
-		io.sockets.emit('gameOver', {winner, stringCount: this.stringCount});
-	}
-}
-
-var clicky = new Clicky();
-var sockets = [];
+const Clicky = require('./clicky');
+// const Playlist = require('./playlist');
 
 io.on('connection', function(socket) {
 	
-	socket.emit('newGame', {role: socket.role, game: clicky});
-	socket.emit('updateTrack', clicky.soundtrack);
-	sockets.push(socket);
+	socket.on('joinGame', async ({playerName}) => {
+		
+		const game = new Clicky();
+		
+		await game.join(socket);
+		
+		socket.emit('gameData', game);
+	});
 
 	socket.on('disconnect', function () {
-		sockets.splice(sockets.indexOf(socket), 1);
+		// Remove socket from sockets array
+		// sockets.splice(sockets.indexOf(socket), 1);
 		
-		if (socket.player)
-			io.sockets.emit('playerLeft', socket.player.id);
-			clicky.evenPlayerCount = sockets.map(s => s.player).filter(p => !!p).length %2 == 0;
+		// Notify clients that player left the game
+		// Update even player count status
+		// if (socket.player)
+		// 	io.sockets.emit('playerLeft', socket.player.id);
+		// 	clicky.evenPlayerCount = sockets.map(s => s.player).filter(p => !!p).length %2 == 0;
 	});
 
-	socket.on('makeMove', () => {
+	/*socket.on('makeMove', () => {
 		if (socket.player && clicky.evenPlayerCount)
 			clicky.makeMove(socket.player.role);
-	});
+	});*/
 	
-	socket.on('joinGame', data => {
+	/*socket.on('joinGame', data => {
 		
 		const userSocketIndex = sockets.indexOf(socket);
 		
@@ -96,7 +71,7 @@ io.on('connection', function(socket) {
 			playerId: player.id
 		});
 		socket.broadcast.emit('newPlayer', player);
-	});
+	});*/
 	
 	socket.on('skipTrack', () => {
 		clicky.soundtrack = playlist.updateTrack();

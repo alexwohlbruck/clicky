@@ -292,17 +292,18 @@
 				const keys = {
 					makeMove: 32 // 'spacebar'
 				};
-
-				socket.on('newGame', ({role, game}) => {
-					$scope.role = role;
-					$scope.clicky = game;
-					$scope.updateTrack(game.soundtrack);
-					$scope.$apply();
-				});
 				
 				$scope.joinGame = () => {
 					socket.emit('joinGame', {playerName: $scope.playerName});
 				};
+
+				socket.on('gameData', game => {
+					// $scope.role = role;
+					$scope.clicky = game;
+					console.log(game);
+					$scope.updateTrack(game.playlist);
+					$scope.$apply();
+				});
 				
 				socket.on('allPlayers', ({players, playerId}) => {
 					$scope.playerId = playerId;
@@ -377,7 +378,6 @@
 				};
 			});
 			
-			
 			const showSplashScreen = function() {
 				const splashTrack = new Audio('audio/splash.mp3');
 				splashTrack.addEventListener('canplaythrough', () => {
@@ -394,6 +394,8 @@
 					}
 					
 					const frames = {
+						1: {splashStyle: {display: 'none'}}, // Hide splash for testing
+						
 						0: {textStyle: {fontSize: '20em', visibility: 'visible'}},
 						462: {textStyle: {fontSize: '15em'}},
 						924: {textStyle: {fontSize: '10em'}},

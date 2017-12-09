@@ -10,8 +10,10 @@
   "author": "Alex Wohlbruck <alexwohlbruck@gmail.com>",
   "dependencies": {
     "async": "~0.2.8",
+    "bluebird": "^3.5.1",
     "express": "~3.2.4",
-    "socket.io": "~0.9.14"
+    "socket.io": "~0.9.14",
+    "spotify-web-api-node": "^2.5.0"
   },
   "devDependencies": {
     "nodemon": "^1.12.1"

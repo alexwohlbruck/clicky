@@ -1,53 +1,27 @@
-module.exports = {
-	// https://www.randomlists.com/random-songs
-	// https://codepen.io/bobhami/pen/gwAJNp
+const spotify = require('./spotify');
+const Promise = require('bluebird');
+
+class Playlist {
+	init() {
+		return new Promise((resolve, reject) => {
+			spotify.getPlaylistTracks('alexwohlbruck', '4piPcXnIjFKrQ8qoE5ZpZ9').then(tracks => {
+				this.tracks = tracks.body.items.map(track => {
+					return {
+						track: track.track.name,
+						artist: track.track.artists[0].name
+					};
+				});
+				
+				resolve();
+			}, err => {
+				reject(err);
+			});
+		});
+	}
 	updateTrack() {
-		return this.tracks[Math.floor(Math.random() * this.tracks.length)];
-	},
-	tracks: [{
-		track: 'girl is a queen',
-		artist: 'splash'
-	},{
-		track: 'farrah fawcett hair',
-		artist: 'capital cities'
-	},{
-		track: 'mr blue sky',
-		artist: 'electric light orchestra'
-	},{
-		track: 'its tricky',
-		artist: 'run'
-	},{
-		track: 'how i want ya',
-		artist: 'hudson thames'
-	},{
-		track: 'champagne',
-		artist: 'ganja white knight'
-	},{
-		track: 'takillya',
-		artist: 'vinnie maniscalco'
-	},{
-		track: 'in cold blood baauer remix',
-		artist: 'alt-j'
-	},{
-		track: 'ongoing thing',
-		artist: '20syl'
-	},{
-		track: 'the wild life',
-		artist: 'outasight'
-	},{
-		track: 'move',
-		artist: 'saint motel'
-	},{
-		track: 'kiss this',
-		artist: 'the struts'
-	},{
-		track: 'get ugly',
-		artist: 'json derulo'
-	},{
-		track: 'hollow life',
-		artist: 'coast modern'
-	},{
-		track: 'run boy run',
-		artist: 'woodkid'
-	}]
-};
+		return this.tracks ? this.tracks[Math.floor(Math.random() * this.tracks.length)] : {};
+	}
+}
+
+
+module.exports = Playlist;
