@@ -13,16 +13,28 @@ router.use(express.static(path.resolve(__dirname, 'client')));
 
 const Clicky = require('./clicky');
 // const Playlist = require('./playlist');
+var games = [];
 
 io.on('connection', function(socket) {
 	
 	socket.on('joinGame', async ({playerName}) => {
 		
-		const game = new Clicky();
+		var game, player;
+		const newestGame = games[games.length - 1],
+			  noGamesAvailable = !newestGame || newestGame.players.length > 10;
 		
-		await game.join(socket);
+		if (noGamesAvailable) {
+			game = new Clicky();
+			player = await game.join({socket, playerName});
 		
-		socket.emit('gameData', game);
+			games.push(game);
+		} else {
+			game = newestGame;
+			player = await game.join({socket, playerName});
+		}
+		
+		socket.gameId = game.id;
+		socket.emit('gameData', {game, player});
 	});
 
 	socket.on('disconnect', function () {
@@ -74,8 +86,10 @@ io.on('connection', function(socket) {
 	});*/
 	
 	socket.on('skipTrack', () => {
-		clicky.soundtrack = playlist.updateTrack();
-		io.sockets.emit('updateTrack', clicky.soundtrack);
+		const gameId = socket.gameId,
+			  game = games[gameId];
+			  
+		io.sockets.in(gameId).emit('updateTrack', game.playlist.tracks[game.updateTrackIndex()]);
 	});
 });
 

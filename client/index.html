@@ -191,7 +191,7 @@
 				<div class="info space-between">
 					<div class="white">
 						<p>Spacebar</p>
-						<p class="small-text">{{players[playerId].role == 'create' ? 'Add' : 'Remove'}} segment</p>
+						<p class="small-text">{{me.role == 'create' ? 'Add' : 'Remove'}} segment</p>
 						<div class="break"></div>
 						<p>Reach the edge</p>
 					</div>
@@ -210,13 +210,13 @@
 							type='text'
 							ng-model="playerName"
 							class="player-name center-text-align"
-							ng-show="!players[playerId].role"
+							ng-show="!me"
 							placeholder="Enter your name"
 							autofocus>
 					</form>
 					
-					<h2 class="center-text-align" ng-show="players[playerId].role">
-						{{evenPlayerCount() ? players[playerId].role : 'Waiting for opponent'}}
+					<h2 class="center-text-align" ng-show="me">
+						{{evenPlayerCount() ? me.role : 'Waiting for opponent'}}
 					</h2>
 				
 					<div class="bar">
@@ -241,7 +241,7 @@
 			
 			<div class="players space-between">
 				<div class="destroyers">
-					<p ng-repeat="(id, player) in players" ng-if="player.role == 'destroy'">
+					<p ng-repeat="(id, player) in players" ng-if="me.role == 'destroy'">
 						{{player.name}}
 					</p>
 				</div>
@@ -251,7 +251,7 @@
 				</div>
 				
 				<div class="creators">
-					<p ng-repeat="(id, player) in players" ng-if="player.role == 'create'">
+					<p ng-repeat="(id, player) in players" ng-if="me.role == 'create'">
 						{{player.name}}
 					</p>
 				</div>
@@ -286,7 +286,7 @@
 				
 				$scope.clicky = {};
 				$scope.players = {};
-				$scope.playerId = null;
+				$scope.me = null;
 				
 				// Global keypress key codes
 				const keys = {
@@ -297,11 +297,11 @@
 					socket.emit('joinGame', {playerName: $scope.playerName});
 				};
 
-				socket.on('gameData', game => {
-					// $scope.role = role;
+				socket.on('gameData', ({game, player}) => {
+					$scope.me = player;
 					$scope.clicky = game;
-					console.log(game);
 					$scope.updateTrack(game.playlist);
+					console.log({game, player});
 					$scope.$apply();
 				});
 				
@@ -317,7 +317,7 @@
 				});
 				
 				socket.on('playerLeft', playerId => {
-					delete $scope.players[playerId];
+					delete $scope.me.role
 					$scope.$apply();
 				});
 				
@@ -362,8 +362,9 @@
 					socket.emit('skipTrack');
 				};
 				
-				socket.on('updateTrack', (newTrack) => {
+				socket.on('updateTrack', newTrack => {
 					$scope.updateTrack(newTrack);
+					console.log(newTrack);
 				});
 				
 				$scope.updateTrack = ({track, artist}) => {

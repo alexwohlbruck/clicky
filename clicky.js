@@ -8,14 +8,18 @@ class Clicky {
 		this.stringCount = this.max / 2;
 		this.evenPlayerCount = true;
 		this.initialization = (async () => {
-			const data = await spotify.getPlaylistTracks('alexwohlbruck', '4piPcXnIjFKrQ8qoE5ZpZ9');
+			const data = await spotify.getPlaylistTracks('alexwohlbruck', '4piPcXnIjFKrQ8qoE5ZpZ9'),
+				  tracks = data.body.items.map(item => {
+					  return {
+						  artist: item.track.artists[0].name,
+						  track: item.track.name
+					  };
+				  });
 			
-			this.playlist = data.body.items.map(item => {
-				return {
-					artist: item.track.artists[0].name,
-					track: item.track.name
-				};
-			});
+			this.playlist = {
+				tracks,
+				index: Math.floor(Math.random() * tracks.length)
+			};
 		})();
 	}
 	
@@ -23,13 +27,27 @@ class Clicky {
 		return new Date().valueOf().toString();
 	}
 	
-	async join(socket) {
-		await this.initialization;
+	updateTrackIndex() {
+		const index = Math.floor(Math.random() * this.playlist.length);
+		this.playlist.index = index;
+		return index;
+	}
+	
+	async join({socket, playerName}) {
+		await this.initialization; // Ensure that playlist is populated
 		
-		socket.join(this.id); // Add user to socket.io room
-		this.players.push(socket.id); // Add user to game roster
+		socket.join(this.id);
 		
+		const newPlayer = {
+			id: socket.id,
+			playerName,
+			role: this.evenPlayerCount ? 'create' : 'destroy'
+		};
+		
+		this.players.push(newPlayer); // Add user to game roster
 		this.updateEvenPlayerCount();
+		
+		return newPlayer;
 	}
 	
 	updateEvenPlayerCount() {
