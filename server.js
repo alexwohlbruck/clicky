@@ -7,14 +7,9 @@ var router = express();
 var server = http.createServer(router);
 var io = socketio.listen(server);
 
-io.set('log level', 0)
-
 router.use(express.static(path.resolve(__dirname, 'client')));
 
-//////////////////////////////////////////////////////////////
-
 const Clicky = require('./clicky');
-// const Playlist = require('./playlist');
 var games = [];
 
 io.on('connection', function(socket) {
@@ -22,26 +17,6 @@ io.on('connection', function(socket) {
 	function emit(eventName, data) {
 		io.sockets.in(socket.gameId).emit(eventName, data);
 	}
-	
-	/*
-	// Set role for new player
-	// This method ensures that the counts do not get out of sync
-	const roles = sockets.map(s => s.player).filter(p => !!p).map(p => p.role),
-		  creatorsCount   = roles.filter(role => role == 'create').length,
-		  destroyersCount = roles.filter(role => role == 'destroy').length;
-	*/
-	
-	/*const emit = {
-		all: (eventName, data) => {
-			io.sockets.in(socket.gameId).emit(eventName, data);
-		},
-		sender: (eventName, data) => {
-			socket.emit(eventName, data);
-		},
-		allButSender: (eventName, data) => {
-			socket.broadcast.to(socket.gameId).emit(eventName, data);
-		} 
-	};*/
 	
 	socket.on('joinGame', async ({playerName}) => {
 		

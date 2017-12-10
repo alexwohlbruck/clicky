@@ -184,7 +184,8 @@
 	</head>
 	<body>
 		<div id="splash" ng-if="!hideSplash">
-			<h1 id="splash-text">Clicky</h1>
+			<!-- Text populated by js -->
+			<h1 id="splash-text"></h1>
 		</div>
 		
 		<div id="app" ng-controller="ClickyCtrl" ng-cloak>
@@ -280,11 +281,7 @@
 				
 				const socket = io.connect();
 				const audio = document.getElementById('track');
-				
 				const splashTrack = showSplashScreen();
-				splashTrack.addEventListener('ended', () => {
-					audio.play();
-				});
 				
 				$scope.clicky = {};
 				$scope.me = null;
@@ -301,7 +298,10 @@
 				socket.on('gameData', ({game, player}) => {
 					$scope.me = player;
 					$scope.clicky = game;
+					
+					splashTrack.pause();
 					$scope.updateTrack(game.playlist.tracks[game.playlist.index]);
+					
 					$scope.$apply();
 				});
 				
@@ -355,25 +355,24 @@
 				
 				socket.on('updateTrack', newTrack => {
 					$scope.updateTrack(newTrack);
-					console.log(newTrack);
 				});
 				
 				$scope.updateTrack = ({track, artist}) => {
 					$scope.track = track;
 					$scope.artist = artist;
 					$scope.trackUrl = 'https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=' + artist + '&track=' + track;
+					audio.play();
 					$scope.$apply();
-					
-					if (splashTrack.ended) {
-						audio.play();
-					}
 				};
 			});
 			
 			const showSplashScreen = function() {
-				const splashTrack = new Audio('audio/splash.mp3');
+				const splashTrack = new Audio('audio/game-music.mp3');
+					  splashTrack.loop = true;
+					
 				splashTrack.addEventListener('canplaythrough', () => {
 					splashTrack.play();
+					
 					var isDark = false;
 					const splash = document.getElementById('splash');
 					const splashText = document.getElementById('splash-text');
@@ -386,29 +385,52 @@
 					}
 					
 					const frames = {
+						0: {textStyle: {fontSize: '15em', visibility: 'visible'}},
 						// 1: {splashStyle: {display: 'none'}}, // Hide splash for testing
 						
-						0: {textStyle: {fontSize: '20em', visibility: 'visible'}},
-						462: {textStyle: {fontSize: '15em'}},
-						924: {textStyle: {fontSize: '10em'}},
-						1386: {textStyle: {fontSize: '6em'}},
+						326: {appendLetter: true},
+						480: {appendLetter: true},
 						
-						1750: {animation: 140},
-						3000: {animation: null},
+						810: {appendLetter: true},
+						975: {appendLetter: true},
+						1130: {appendLetter: true},
+						1278: {appendLetter: true},
 						
-						3700: {animation: 50},
-						4880: {animation: null},
+						1611: {textStyle: {fontSize: '15em'}},
+						1766: {textStyle: {fontSize: '16em'}},
 						
-						4500: {textStyle: {top: '80%'}},
-						4600: {textStyle: {top: '40%', color: 'black'}, splashStyle: {background: 'white'}},
-						4700: {textStyle: {top: '80%'}},
-						4800: {textStyle: {top: '20%'}},
-						5000: {textStyle: {top: '90%', color: 'white'}, splashStyle: {background: 'black'}},
+						2080: {textStyle: {fontSize: '14em'}},
+						2234: {textStyle: {fontSize: '13em'}},
 						
-						5500: {splashStyle: {display: 'none'}}
+						
+						2565: {textStyle: {fontSize: '15em'}},
+						
+						2877: {textStyle: {fontSize: '20em'}},
+						3070: {textStyle: {fontSize: '18em'}},
+						
+						3369: {textStyle: {fontSize: '19em'}},
+						3519: {textStyle: {fontSize: '18em'}},
+						3667: {textStyle: {fontSize: '17em'}},
+						3839: {textStyle: {fontSize: '16em'}},
+						
+						4163: {textStyle: {fontSize: '15em'}},
+						4300: {textStyle: {fontSize: '16em'}},
+						
+						4647: {textStyle: {fontSize: '14em'}},
+						4840: {textStyle: {fontSize: '13em'}},
+						
+						5100: {animation: 315},
+						
+						7665: {animation: null},
+						7666: {animation: 40},
+						
+						8943: {animation: null},
+						9637: {splashStyle: {display: 'none'}}
 						
 					};
-					var animationInterval;
+					
+					var animationInterval, textCounter = 0;
+					const text = 'clicky';
 					
 					for (const ms in frames) {
 						setTimeout(() => {
@@ -423,7 +445,12 @@
 									splash.style[styleName] = frame.splashStyle[styleName];
 								}
 							}
+							if (frame.appendLetter) {
+								splashText.textContent += text[textCounter];
+								textCounter++;
+							}
 							if (frame.animation) {
+								flash();
 								animationInterval = setInterval(flash, frame.animation);
 							} else {
 								clearInterval(animationInterval);

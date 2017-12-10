@@ -6,8 +6,20 @@ const spotify = new SpotifyWebApi({
   redirectUri: 'http://localhost:3030/api/auth/callback'
 });
 
-spotify.clientCredentialsGrant().then(data => {
-  spotify.setAccessToken(data.body['access_token']);
-});
+function refreshAccessToken() {
+  spotify.clientCredentialsGrant().then(data => {
+    const access_token = data.body['access_token'],
+          expires_in_ms = parseInt(data.body['expires_in'], 10) * 1000;
+          
+    spotify.setAccessToken(access_token);
+    
+    /* Automatically refresh after expiration period */
+    setTimeout(() => {
+      refreshAccessToken();
+    }, expires_in_ms);
+  });
+}
+
+refreshAccessToken();
 
 module.exports = spotify;
