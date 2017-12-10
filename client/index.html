@@ -361,8 +361,8 @@
 					$scope.track = track;
 					$scope.artist = artist;
 					$scope.trackUrl = 'https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=' + artist + '&track=' + track;
-					audio.play();
 					$scope.$apply();
+					audio.play();
 				};
 			});
 			
@@ -396,28 +396,28 @@
 						1130: {appendLetter: true},
 						1278: {appendLetter: true},
 						
-						1611: {textStyle: {fontSize: '15em'}},
-						1766: {textStyle: {fontSize: '16em'}},
+						1611: {textStyle: {fontSize: '10em'}},
+						1766: {textStyle: {fontSize: '15em'}},
 						
-						2080: {textStyle: {fontSize: '14em'}},
-						2234: {textStyle: {fontSize: '13em'}},
+						2080: {textStyle: {fontSize: '13em'}},
+						2234: {textStyle: {fontSize: '11em'}},
 						
 						
-						2565: {textStyle: {fontSize: '15em'}},
+						2565: {textStyle: {fontSize: '13em'}},
 						
-						2877: {textStyle: {fontSize: '20em'}},
-						3070: {textStyle: {fontSize: '18em'}},
+						2877: {textStyle: {fontSize: '11em'}},
+						3070: {textStyle: {fontSize: '10em'}},
 						
-						3369: {textStyle: {fontSize: '19em'}},
-						3519: {textStyle: {fontSize: '18em'}},
-						3667: {textStyle: {fontSize: '17em'}},
-						3839: {textStyle: {fontSize: '16em'}},
+						3369: {textStyle: {transform: 'translateY(-50%) scaleX(1.4)'}},
+						3519: {textStyle: {transform: 'translateY(-50%) scaleX(1)'}},
+						3667: {textStyle: {transform: 'translateY(-50%) scaleY(1.4)'}},
+						3839: {textStyle: {transform: 'translateY(-50%) scaleY(1)'}},
 						
-						4163: {textStyle: {fontSize: '15em'}},
-						4300: {textStyle: {fontSize: '16em'}},
+						4163: {textStyle: {fontSize: '14em'}},
+						4300: {textStyle: {fontSize: '18em'}},
 						
-						4647: {textStyle: {fontSize: '14em'}},
-						4840: {textStyle: {fontSize: '13em'}},
+						4647: {textStyle: {fontSize: '12em'}},
+						4840: {textStyle: {fontSize: '9em'}},
 						
 						5100: {animation: 315},
 						
@@ -425,8 +425,7 @@
 						7666: {animation: 40},
 						
 						8943: {animation: null},
-						9637: {splashStyle: {display: 'none'}}
-						
+						9637: {complete: true}
 					};
 					
 					var animationInterval, textCounter = 0;
@@ -454,6 +453,9 @@
 								animationInterval = setInterval(flash, frame.animation);
 							} else {
 								clearInterval(animationInterval);
+							}
+							if (frame.complete) {
+								splash.remove();
 							}
 						}, ms);
 					}
