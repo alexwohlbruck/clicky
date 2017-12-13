@@ -1,6 +1,6 @@
 {
   "name": "clicky",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "A fun multiplayer game about creation and destruction",
   "scripts": {
     "start": "node server.js",
