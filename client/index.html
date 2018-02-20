@@ -155,6 +155,7 @@
 			}
 			
 			.title {
+				/*display: none;*/
 				background-color: white;
 				padding: 20px 35px 15px 40px;
 			}
@@ -177,15 +178,14 @@
 				top: 50%;
 				transform: translateY(-50%);
 				text-align: center;
-				visibility: hidden;
 			}
 			
 		</style>
 	</head>
 	<body>
-		<div id="splash" ng-if="!hideSplash">
+		<div id="splash">
 			<!-- Text populated by js -->
-			<h1 id="splash-text" style='visibility: visible'>clicky</h1>
+			<h1 id="splash-text"></h1>
 		</div>
 		
 		<div id="app" ng-controller="ClickyCtrl" ng-cloak>
@@ -273,49 +273,53 @@
 			
 			const socket = io.connect();
 			
-			const animationFrames = {
-						0: {textStyle: {fontSize: '15em', visibility: 'visible'}},
-						// 1: {splashStyle: {display: 'none'}}, // Hide splash for testing
-						
-						326: {appendLetter: true},
-						480: {appendLetter: true},
-						
-						810: {appendLetter: true},
-						975: {appendLetter: true},
-						1130: {appendLetter: true},
-						1278: {appendLetter: true},
-						
-						1611: {textStyle: {fontSize: '10em'}},
-						1766: {textStyle: {fontSize: '15em'}},
-						
-						2080: {textStyle: {fontSize: '13em'}},
-						2234: {textStyle: {fontSize: '11em'}},
-						
-						
-						2565: {textStyle: {fontSize: '13em'}},
-						
-						2877: {textStyle: {fontSize: '11em'}},
-						3070: {textStyle: {fontSize: '10em'}},
-						
-						3369: {textStyle: {transform: 'translateY(-50%) scaleX(1.4)'}},
-						3519: {textStyle: {transform: 'translateY(-50%) scaleX(1)'}},
-						3667: {textStyle: {transform: 'translateY(-50%) scaleY(1.4)'}},
-						3839: {textStyle: {transform: 'translateY(-50%) scaleY(1)'}},
-						
-						4163: {textStyle: {fontSize: '12em', transform: 'translateY(-50%) rotate(-5deg)'}},
-						4300: {textStyle: {fontSize: '14em', transform: 'translateY(-50%) rotate(-10deg)'}},
-						
-						4647: {textStyle: {fontSize: '12em', transform: 'translateY(-50%) rotate(-5deg)'}},
-						4840: {textStyle: {fontSize: '9em', transform: 'translateY(-50%) rotate(0deg)'}},
-						
-						5100: {animation: 315},
-						
-						7665: {animation: null},
-						7666: {animation: 40},
-						
-						8943: {animation: null},
-						9637: {splashStyle: {display: 'none'}}
-					};
+			const introAnimationFrames = {
+				0: {textStyle: {fontSize: '15em', visibility: 'visible'}},
+				
+				326: {appendLetter: true},
+				480: {appendLetter: true},
+				
+				810: {appendLetter: true},
+				975: {appendLetter: true},
+				1130: {appendLetter: true},
+				1278: {appendLetter: true},
+				
+				1611: {textStyle: {fontSize: '10em'}},
+				1766: {textStyle: {fontSize: '15em'}},
+				
+				2080: {textStyle: {fontSize: '13em'}},
+				2234: {textStyle: {fontSize: '11em'}},
+				
+				
+				2565: {textStyle: {fontSize: '13em'}},
+				
+				2877: {textStyle: {fontSize: '11em'}},
+				3070: {textStyle: {fontSize: '10em'}},
+				
+				3369: {textStyle: {transform: 'translateY(-50%) scaleX(1.4)'}},
+				3519: {textStyle: {transform: 'translateY(-50%) scaleX(1)'}},
+				3667: {textStyle: {transform: 'translateY(-50%) scaleY(1.4)'}},
+				3839: {textStyle: {transform: 'translateY(-50%) scaleY(1)'}},
+				
+				4163: {textStyle: {fontSize: '12em', transform: 'translateY(-50%) rotate(-5deg)'}},
+				4300: {textStyle: {fontSize: '14em', transform: 'translateY(-50%) rotate(-10deg)'}},
+				
+				4647: {textStyle: {fontSize: '12em', transform: 'translateY(-50%) rotate(-5deg)'}},
+				4840: {textStyle: {fontSize: '9em', transform: 'translateY(-50%) rotate(0deg)'}},
+				
+				5100: {flashAnimation: 315},
+				
+				7665: {flashAnimation: null},
+				7666: {flashAnimation: 40},
+				
+				8943: {flashAnimation: null},
+				9637: {splashStyle: {display: 'none'}, setText: ''}
+			};
+			
+			const endRoundAnimationFrames = {
+				0: {textStyle: {fontSize: '15em', visibility: 'visible'}},
+				9637: {splashStyle: {display: 'none'}, setText: ''}
+			};
 			
 			const audio = document.getElementById('track');
 			
@@ -324,7 +328,6 @@
 					audio.src = audioSrc;
 					this.animationFrames = animationFrames;
 					this.text = text;
-					
 					
 					this.splash = document.getElementById('splash');
 					this.splashText = document.getElementById('splash-text');
@@ -337,53 +340,71 @@
 					this.init();
 				}
 				init() {
-					this.playAnimation();
 					audio.addEventListener('canplaythrough', () => {
 						audio.play();
+						this.playAnimation();
 					});
 				}
 				playAnimation() {
+					const switchColors = () => {
+						this.isDark = !this.isDark;
+						this.splash.style.backgroundColor = this.isDark ? 'black' : 'white';
+						this.splashText.style.color = this.isDark ? 'white' : 'black';
+						this.splashText.style.fontSize = this.isDark ? '8em' : '6em';
+					};
+					
+					const that = this;
+					
+					const methods = {
+						textStyle(frame) {
+							for (var styleName in frame.textStyle) {
+								that.splashText.style[styleName] = frame.textStyle[styleName];
+							}
+						},
+						splashStyle(frame) {
+							for (var styleName in frame.splashStyle) {
+								that.splash.style[styleName] = frame.splashStyle[styleName];
+							}
+						},
+						setText(frame) {
+							that.splashText.textContent = frame.setText || '';
+						},
+						appendLetter(frame) {
+							const letter = that.text[that.textIndexCounter];
+							that.splashText.textContent += letter || '';
+							that.textIndexCounter++;
+						},
+						flashAnimation(frame) {
+							if (frame.flashAnimation === null) {
+								console.log(that);
+								clearInterval(that.animationInterval);
+							} else {
+								switchColors();
+								that.animationInterval = setInterval(switchColors, frame.flashAnimation);
+							}
+						}
+					}
+					
+					console.log(methods)
+					
+					methods.splashStyle({display: 'block'});
 					
 					for (const ms in this.animationFrames) {
 						setTimeout(() => {
 							const frame = this.animationFrames[ms];
-							if (frame.textStyle) {
-								for (var styleName in frame.textStyle) {
-									this.splashText.style[styleName] = frame.textStyle[styleName];
-								}
-							}
-							if (frame.splashStyle) {
-								for (var styleName in frame.splashStyle) {
-									this.splash.style[styleName] = frame.splashStyle[styleName];
-								}
-							}
-							if (frame.appendLetter) {
-								const letter = this.text[this.textIndexCounter];
-								this.splashText.textContent += letter || '';
-								this.textIndexCounter++;
-								console.log(this.splashText)
-							}
-							if (frame.animation) {
-								this.switchColors();
-								this.animationInterval = setInterval(this.switchColors, frame.animation);
-							} else {
-								clearInterval(this.animationInterval);
+							
+							for(const method in frame) {
+								methods[method](frame);
 							}
 						}, ms);
 					}
-				}
-				switchColors() {
-					this.isDark = !this.isDark;
-					this.splash.style.backgroundColor = this.isDark ? 'black' : 'white';
-					this.splashText.style.color = this.isDark ? 'white' : 'black';
-					this.splashText.style.fontSize = this.isDark ? '8em' : '6em';
 				}
 			}
 			
 			new Flash({
 				text: 'clicky',
 				audioSrc: 'audio/game-music.mp3',
-				animationFrames
+				animationFrames: introAnimationFrames
 			});
 			
 			app.filter('round', () => {
@@ -410,7 +431,7 @@
 					$scope.me = player;
 					$scope.clicky = game;
 					
-					splashTrack.pause();
+					audio.pause();
 					$scope.updateTrack(game.playlist.tracks[game.playlist.index]);
 					
 					$scope.$apply();
@@ -448,7 +469,11 @@
 				});
 				
 				socket.on('gameOver', ({winner}) => {
-					alert(winner + ' win!');
+					new Flash({
+						text: `${winner} win`,
+						// audioSrc: 'audio/game-music.mp3',
+						animationFrames: endRoundAnimationFrames
+					});
 				});
 				
 				$scope.range = (n) => {

@@ -41,7 +41,7 @@ io.on('connection', function(socket) {
 		socket.player = player;
 	});
 
-	socket.on('disconnect', function () {
+	socket.on('disconnect', () => {
 		// Remove socket from sockets array
 		if (socket.gameId) {
 			const game = games.find(game => game.id == socket.gameId);
