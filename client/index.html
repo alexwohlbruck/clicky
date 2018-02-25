@@ -317,14 +317,16 @@
 			};
 			
 			const endRoundAnimationFrames = {
-				0: {textStyle: {fontSize: '15em', visibility: 'visible'}},
-				9637: {splashStyle: {display: 'none'}, setText: ''}
+				0: {splashStyle: {display: 'block'}, flashAnimation: 100, textStyle: {visibility: 'visible', fontSize: '10em'}},
+				300: {appendLetter: {interval: 150}},
+				5000: {splashStyle: {display: 'none'}, setText: ''}
 			};
 			
 			const audio = document.getElementById('track');
 			
 			class Flash {
 				constructor({text, audioSrc, animationFrames}) {
+					console.log(animationFrames)
 					audio.src = audioSrc;
 					this.animationFrames = animationFrames;
 					this.text = text;
@@ -357,12 +359,12 @@
 					
 					const methods = {
 						textStyle(frame) {
-							for (var styleName in frame.textStyle) {
+							for (const styleName in frame.textStyle) {
 								that.splashText.style[styleName] = frame.textStyle[styleName];
 							}
 						},
 						splashStyle(frame) {
-							for (var styleName in frame.splashStyle) {
+							for (const styleName in frame.splashStyle) {
 								that.splash.style[styleName] = frame.splashStyle[styleName];
 							}
 						},
@@ -370,13 +372,22 @@
 							that.splashText.textContent = frame.setText || '';
 						},
 						appendLetter(frame) {
-							const letter = that.text[that.textIndexCounter];
-							that.splashText.textContent += letter || '';
-							that.textIndexCounter++;
+							const append = () => {
+								const letter = that.text[that.textIndexCounter];
+								that.splashText.textContent += letter || '';
+								that.textIndexCounter++;
+							};
+							
+							if (frame.appendLetter === true) {
+								append();
+							} else if (frame.appendLetter.interval) {
+								for (let i = 0; i < that.text.length; i++) {
+									setTimeout(append, i * frame.appendLetter.interval);
+								}
+							}
 						},
 						flashAnimation(frame) {
 							if (frame.flashAnimation === null) {
-								console.log(that);
 								clearInterval(that.animationInterval);
 							} else {
 								switchColors();
@@ -385,15 +396,11 @@
 						}
 					}
 					
-					console.log(methods)
-					
-					methods.splashStyle({display: 'block'});
-					
 					for (const ms in this.animationFrames) {
 						setTimeout(() => {
 							const frame = this.animationFrames[ms];
 							
-							for(const method in frame) {
+							for (const method in frame) {
 								methods[method](frame);
 							}
 						}, ms);
@@ -471,7 +478,7 @@
 				socket.on('gameOver', ({winner}) => {
 					new Flash({
 						text: `${winner} win`,
-						// audioSrc: 'audio/game-music.mp3',
+						audioSrc: 'audio/bts.mp3',
 						animationFrames: endRoundAnimationFrames
 					});
 				});
@@ -494,7 +501,7 @@
 				});
 				
 				$scope.updateTrack = ({track, artist}) => {
-					$scope.track = track;
+					$scope.track = track; 
 					$scope.artist = artist;
 					$scope.trackUrl = 'https://jukebox-redux.herokuapp.com/api/tracks/mp3?artist=' + artist + '&track=' + track;
 					$scope.$apply();
@@ -502,100 +509,6 @@
 				};
 			});
 			
-			/*const showSplashScreen = function() {
-				const splashTrack = new Audio('audio/game-music.mp3');
-					  splashTrack.loop = true;
-					
-				splashTrack.addEventListener('canplaythrough', () => {
-					splashTrack.play();
-					
-					var isDark = false;
-					const splash = document.getElementById('splash');
-					const splashText = document.getElementById('splash-text');
-					
-					function flash() {
-						isDark = !isDark;
-						splash.style.backgroundColor = isDark ? 'black' : 'white';
-						splashText.style.color = isDark ? 'white' : 'black';
-						splashText.style.fontSize = isDark ? '8em' : '6em';
-					}
-					
-					const frames = {
-						0: {textStyle: {fontSize: '15em', visibility: 'visible'}},
-						// 1: {splashStyle: {display: 'none'}}, // Hide splash for testing
-						
-						326: {appendLetter: true},
-						480: {appendLetter: true},
-						
-						810: {appendLetter: true},
-						975: {appendLetter: true},
-						1130: {appendLetter: true},
-						1278: {appendLetter: true},
-						
-						1611: {textStyle: {fontSize: '10em'}},
-						1766: {textStyle: {fontSize: '15em'}},
-						
-						2080: {textStyle: {fontSize: '13em'}},
-						2234: {textStyle: {fontSize: '11em'}},
-						
-						
-						2565: {textStyle: {fontSize: '13em'}},
-						
-						2877: {textStyle: {fontSize: '11em'}},
-						3070: {textStyle: {fontSize: '10em'}},
-						
-						3369: {textStyle: {transform: 'translateY(-50%) scaleX(1.4)'}},
-						3519: {textStyle: {transform: 'translateY(-50%) scaleX(1)'}},
-						3667: {textStyle: {transform: 'translateY(-50%) scaleY(1.4)'}},
-						3839: {textStyle: {transform: 'translateY(-50%) scaleY(1)'}},
-						
-						4163: {textStyle: {fontSize: '12em', transform: 'translateY(-50%) rotate(-5deg)'}},
-						4300: {textStyle: {fontSize: '14em', transform: 'translateY(-50%) rotate(-10deg)'}},
-						
-						4647: {textStyle: {fontSize: '12em', transform: 'translateY(-50%) rotate(-5deg)'}},
-						4840: {textStyle: {fontSize: '9em', transform: 'translateY(-50%) rotate(0deg)'}},
-						
-						5100: {animation: 315},
-						
-						7665: {animation: null},
-						7666: {animation: 40},
-						
-						8943: {animation: null},
-						9637: {splashStyle: {display: 'none'}}
-					};
-					
-					var animationInterval, textIndexCounter = 0;
-					const text = 'clicky';
-					
-					for (const ms in frames) {
-						setTimeout(() => {
-							const frame = frames[ms];
-							if (frame.textStyle) {
-								for (var styleName in frame.textStyle) {
-									splashText.style[styleName] = frame.textStyle[styleName];
-								}
-							}
-							if (frame.splashStyle) {
-								for (var styleName in frame.splashStyle) {
-									splash.style[styleName] = frame.splashStyle[styleName];
-								}
-							}
-							if (frame.appendLetter) {
-								splashText.textContent += text[textIndexCounter];
-								textIndexCounter++;
-							}
-							if (frame.animation) {
-								flash();
-								animationInterval = setInterval(flash, frame.animation);
-							} else {
-								clearInterval(animationInterval);
-							}
-						}, ms);
-					}
-				});
-				
-				return splashTrack;
-			};*/
 		</script>
 	</body>
 </html>
