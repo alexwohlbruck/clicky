@@ -56,7 +56,7 @@ io.on('connection', function(socket) {
 		const game = games.find(game => game.id == socket.gameId),
 			  player = game.players.find(player => player.id == socket.id);
 		
-		if (socket.player && game.evenPlayerCount) {
+		if (socket.player /*&& game.evenPlayerCount*/) {
 			game.makeMove(player.role);
 		}
 	});

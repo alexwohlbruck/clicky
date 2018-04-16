@@ -6,8 +6,13 @@ class Clicky {
 		this.id = this.generateUniqueId();
 		this.players = [];
 		this.max = max || 86;
+		this.roundsCount = 3;
 		this.stringCount = this.max / 2;
 		this.evenPlayerCount = true;
+		this.score = {
+			creators: 0,
+			destroyers: 0
+		};
 		this.initialization = (async () => {
 			const data = await spotify.getPlaylistTracks('alexwohlbruck', '4piPcXnIjFKrQ8qoE5ZpZ9'),
 				  tracks = data.body.items.map(item => {
@@ -42,7 +47,7 @@ class Clicky {
 		const newPlayer = {
 			id: socket.id,
 			name: playerName,
-			role: this.evenPlayerCount ? 'create' : 'destroy'
+			role: this.evenPlayerCount ? 'creators' : 'destroyers'
 		};
 		
 		this.players.push(newPlayer); // Add user to game roster
@@ -66,17 +71,17 @@ class Clicky {
 	
 	makeMove(role) {
 		switch (role) {
-			case 'create':
+			case 'creators':
 				if (this.stringCount === (this.max - 1)) {
-					this.gameOver({winner: 'creators'});
+					this.endRound({winner: 'creators'});
 				} else {
 					this.stringCount++;
 				}
 				break;
 				
-			case 'destroy':
+			case 'destroyers':
 				if (this.stringCount === 1) {
-					this.gameOver({winner: 'destroyers'});
+					this.endRound({winner: 'destroyers'});
 				} else {
 					this.stringCount--;
 				}
@@ -86,9 +91,19 @@ class Clicky {
 		this.emit('madeMove', this.stringCount);
 	}
 	
-	gameOver({winner}) {
-		this.stringCount = this.max / 2;
-		this.emit('gameOver', {winner});
+	endRound({winner}) {
+		this.score[winner]++;
+		
+		const scores = Object.values(this.score);
+		const highestScore = Math.max(...scores);
+		const highestScoreTeam = Object.keys(this.score)[scores.indexOf(highestScore)];
+		
+		if (highestScore >= this.roundsCount) {
+			this.emit('gameOver', {winner: highestScoreTeam});
+		} else {
+			this.stringCount = this.max / 2;
+			this.emit('roundOver', {winner});
+		}
 	}
 }
 

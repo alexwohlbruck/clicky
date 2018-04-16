@@ -193,7 +193,7 @@
 				<div class="info space-between">
 					<div class="white">
 						<p>Spacebar</p>
-						<p class="small-text">{{me.role == 'create' ? 'Add' : 'Remove'}} segment</p>
+						<p class="small-text">{{me.role == 'creators' ? 'Add' : 'Remove'}} segment</p>
 						<div class="break"></div>
 						<p>Reach the edge</p>
 					</div>
@@ -219,7 +219,7 @@
 					</form>
 					
 					<h2 class="center-text-align" ng-show="me">
-						{{clicky.evenPlayerCount ? me.role : 'Waiting for opponent'}}
+						{{clicky.evenPlayerCount ? (me.role == 'creators' ? 'create' : 'destroy') : 'Waiting for opponent'}}
 					</h2>
 				
 					<div class="bar">
@@ -233,18 +233,18 @@
 				
 				<div class="space-between">
 					<div class="white"ng-show="clicky.players">
-						<h3>Destroyers</h3>
+						<h3>Destroyers {{clicky.score.destroyers}}</h3>
 					</div>
 					
 					<div class="right-text-align"ng-show="clicky.players">
-						<h3>Creators</h3>
+						<h3>{{clicky.score.creators}} Creators</h3>
 					</div>
 				</div>
 			</div>
 			
 			<div class="players space-between">
 				<div class="destroyers">
-					<p ng-repeat="(id, player) in clicky.players" ng-if="player.role == 'destroy'">
+					<p ng-repeat="(id, player) in clicky.players" ng-if="player.role == 'destroyers'">
 						{{player.name}}
 					</p>
 				</div>
@@ -254,7 +254,7 @@
 				</div>
 				
 				<div class="creators">
-					<p ng-repeat="(id, player) in clicky.players" ng-if="player.role == 'create'">
+					<p ng-repeat="(id, player) in clicky.players" ng-if="player.role == 'creators'">
 						{{player.name}}
 					</p>
 				</div>
@@ -273,7 +273,7 @@
 			
 			const socket = io.connect();
 			
-			const introAnimationFrames = {
+			/*const introAnimationFrames = {
 				0: {textStyle: {fontSize: '15em', visibility: 'visible'}},
 				
 				326: {appendLetter: true},
@@ -313,13 +313,13 @@
 				7666: {flashAnimation: 40},
 				
 				8943: {flashAnimation: null},
-				9637: {splashStyle: {display: 'none'}, setText: ''}
-			};
+				9637: {endFlash: true}
+			};*/
 			
 			const endRoundAnimationFrames = {
-				0: {splashStyle: {display: 'block'}, flashAnimation: 100, textStyle: {visibility: 'visible', fontSize: '10em'}},
-				300: {appendLetter: {interval: 150}},
-				5000: {splashStyle: {display: 'none'}, setText: ''}
+				0: {splashStyle: {display: 'block'}, flashAnimation: 80, textStyle: {visibility: 'visible', fontSize: '10em'}},
+				300: {appendLetter: {interval: 160}},
+				3000: {endFlash: true}
 			};
 			
 			const audio = document.getElementById('track');
@@ -387,14 +387,17 @@
 							}
 						},
 						flashAnimation(frame) {
-							if (frame.flashAnimation === null) {
-								clearInterval(that.animationInterval);
-							} else {
+							if (frame.flashAnimation !== null) {
 								switchColors();
 								that.animationInterval = setInterval(switchColors, frame.flashAnimation);
 							}
+						},
+						endFlash(frame) {
+							that.splash.style.display = 'none';
+							that.splashText.textContent = '';
+							clearInterval(that.animationInterval);
 						}
-					}
+					};
 					
 					for (const ms in this.animationFrames) {
 						setTimeout(() => {
@@ -411,7 +414,7 @@
 			new Flash({
 				text: 'clicky',
 				audioSrc: 'audio/game-music.mp3',
-				animationFrames: introAnimationFrames
+				animationFrames: endRoundAnimationFrames//introAnimationFrames
 			});
 			
 			app.filter('round', () => {
@@ -437,6 +440,7 @@
 				socket.on('gameData', ({game, player}) => {
 					$scope.me = player;
 					$scope.clicky = game;
+					console.log($scope.clicky);
 					
 					audio.pause();
 					$scope.updateTrack(game.playlist.tracks[game.playlist.index]);
@@ -475,12 +479,29 @@
 					$scope.$apply();
 				});
 				
-				socket.on('gameOver', ({winner}) => {
+				tongVoices = {
+					win: ['were_so_good'],
+					lose: ['thats_unfortunate', 'how_unfortunate']
+				}
+				
+				socket.on('roundOver', ({winner}) => {
+					$scope.clicky.score[winner]++;
+					// $scope.$apply();
+					
+					console.log($scope.me.role, winner)
+					
+					const result = winner == $scope.me.role ? 'win' : 'lose';
+					const tongVoice = tongVoices[result][Math.floor(Math.random() * tongVoices[result].length)];
+					
 					new Flash({
-						text: `${winner} win`,
-						audioSrc: 'audio/bts.mp3',
+						text: `Point to ${winner}`,
+						audioSrc: `audio/tong/${tongVoice}.wav`,
 						animationFrames: endRoundAnimationFrames
 					});
+				});
+				
+				socket.on('gameOver', ({winner}) => {
+					alert('game over');
 				});
 				
 				$scope.range = (n) => {
