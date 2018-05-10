@@ -273,7 +273,7 @@
 			
 			const socket = io.connect();
 			
-			/*const introAnimationFrames = {
+			const introAnimationFrames = {
 				0: {textStyle: {fontSize: '15em', visibility: 'visible'}},
 				
 				326: {appendLetter: true},
@@ -314,7 +314,7 @@
 				
 				8943: {flashAnimation: null},
 				9637: {endFlash: true}
-			};*/
+			};
 			
 			const endRoundAnimationFrames = {
 				0: {splashStyle: {display: 'block'}, flashAnimation: 80, textStyle: {visibility: 'visible', fontSize: '10em'}},
@@ -324,10 +324,19 @@
 			
 			const audio = document.getElementById('track');
 			
+			const playAudio = url => {
+				const audio = new Audio(url);
+				audio.play();
+			};
+			
 			class Flash {
 				constructor({text, audioSrc, animationFrames}) {
-					console.log(animationFrames)
-					audio.src = audioSrc;
+					console.log(animationFrames);
+					
+					if (audioSrc) {
+						audio.src = audioSrc;
+					}
+					
 					this.animationFrames = animationFrames;
 					this.text = text;
 					
@@ -387,7 +396,9 @@
 							}
 						},
 						flashAnimation(frame) {
-							if (frame.flashAnimation !== null) {
+							if (frame.flashAnimation === null) {
+								clearInterval(that.animationInterval);
+							} else {
 								switchColors();
 								that.animationInterval = setInterval(switchColors, frame.flashAnimation);
 							}
@@ -414,7 +425,7 @@
 			new Flash({
 				text: 'clicky',
 				audioSrc: 'audio/game-music.mp3',
-				animationFrames: endRoundAnimationFrames//introAnimationFrames
+				animationFrames: introAnimationFrames//introAnimationFrames
 			});
 			
 			app.filter('round', () => {
@@ -481,7 +492,7 @@
 				
 				tongVoices = {
 					win: ['were_so_good'],
-					lose: ['thats_unfortunate', 'how_unfortunate']
+					lose: ['thats_unfortunate_loud', 'how_unfortunate_loud']
 				}
 				
 				socket.on('roundOver', ({winner}) => {
@@ -493,9 +504,10 @@
 					const result = winner == $scope.me.role ? 'win' : 'lose';
 					const tongVoice = tongVoices[result][Math.floor(Math.random() * tongVoices[result].length)];
 					
+					playAudio(`audio/tong/${tongVoice}.wav`);
+					
 					new Flash({
 						text: `Point to ${winner}`,
-						audioSrc: `audio/tong/${tongVoice}.wav`,
 						animationFrames: endRoundAnimationFrames
 					});
 				});

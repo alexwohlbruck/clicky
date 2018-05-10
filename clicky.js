@@ -6,7 +6,7 @@ class Clicky {
 		this.id = this.generateUniqueId();
 		this.players = [];
 		this.max = max || 86;
-		this.roundsCount = 3;
+		this.roundsCount = 5;
 		this.stringCount = this.max / 2;
 		this.evenPlayerCount = true;
 		this.score = {
