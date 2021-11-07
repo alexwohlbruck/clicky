@@ -25,7 +25,7 @@ io.on('connection', function(socket) {
 			  noGamesAvailable = !newestGame || newestGame.players.length > 10;
 		
 		if (noGamesAvailable) {
-			game = new Clicky({emit, max: 4});
+			game = new Clicky({emit, max: 100});
 			player = await game.join({socket, playerName});
 		
 			games.push(game);
