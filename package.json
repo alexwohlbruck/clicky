@@ -1,0 +1,25 @@
+{
+  "name": "clicky-2",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A fun multiplayer game about creation and destruction",
+  "author": "Alex Wohlbruck <alexwohlbruck@gmail.com>",
+  "scripts": {
+    "dev": "bun run --parallel dev:server dev:web",
+    "dev:server": "bun --watch server/index.ts",
+    "dev:web": "vite",
+    "build": "tsc --noEmit && vite build",
+    "start": "NODE_ENV=production bun server/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}
