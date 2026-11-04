@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { EMOJI, type BotLevel, type Team } from '../../shared/protocol'
 import { display, sound } from '../game/effects'
 import { actions, state } from '../game/store'
+import Icon from './Icon.vue'
 
 const room = computed(() => state.room!)
 /** Spectators get a stand-in so the layout can read a team; nothing they do is sent. */
@@ -81,103 +82,130 @@ const awards = computed(() => {
   if (most && most.id !== results.value?.mvp) give(most.id, '💪 Most presses')
   return badges
 })
+const initial = (name: string) => name.trim().charAt(0).toUpperCase() || '?'
 const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a, b) => b.presses - a.presses))
 </script>
 
 <template>
   <main class="room" :class="[`phase-${room.phase}`, `team-${me.team}`]">
     <!-- Lobby ------------------------------------------------------------- -->
-    <section v-if="inLobby" class="lobby">
-      <header class="lobby-head">
-        <button class="btn ghost" @click="actions.leave()">← Leave</button>
-        <div class="code-block">
-          <span class="muted">{{ room.public ? 'Public room' : 'Room code' }}</span>
-          <strong class="room-code big">{{ room.id }}</strong>
-        </div>
-        <button class="btn" @click="copyInvite">{{ copied ? 'Copied!' : 'Invite' }}</button>
-      </header>
+    <section v-if="inLobby" class="lobby scroll">
+      <div class="lobby-grid">
+        <header class="topbar">
+          <button class="btn icon-btn" aria-label="Leave room" title="Leave" @click="actions.leave()"><Icon name="back" /></button>
+          <div class="room-id">
+            <span class="label">{{ room.public ? 'Public room' : 'Room code' }}</span>
+            <strong>{{ room.id }}</strong>
+          </div>
+          <button class="btn" @click="copyInvite">
+            <Icon :name="copied ? 'check' : 'share'" :size="18" />
+            {{ copied ? 'Copied' : 'Invite' }}
+          </button>
+        </header>
 
-      <div class="teams">
-        <div v-for="t in teams" :key="t.team" class="panel team" :class="t.team">
-          <h2>{{ t.label }}</h2>
-          <ul>
-            <li v-for="p in teamPlayers(t.team)" :key="p.id" :class="{ me: p.id === me.id }">
-              <span>{{ p.bot ? '🤖' : p.id === room.hostId ? '👑' : '•' }}</span>
-              {{ p.name }}
-              <small v-if="p.id === me.id">you</small>
-              <button v-if="isHost && !p.bot && p.id !== me.id" class="kick" :aria-label="`Remove ${p.name}`" @click="actions.kick(p.id)">✕</button>
+        <div class="teams">
+          <section v-for="t in teams" :key="t.team" class="card team" :class="[t.team, { mine: !spectating && me.team === t.team }]">
+            <header class="team-head">
+              <h2>{{ t.label }}</h2>
+              <span class="count">{{ teamPlayers(t.team).length }}</span>
+            </header>
+            <ul class="people">
+              <li v-for="p in teamPlayers(t.team)" :key="p.id" :class="{ me: p.id === me.id }">
+                <span class="avatar" :class="{ bot: p.bot }">
+                  <Icon v-if="p.bot" name="bot" :size="16" />
+                  <template v-else>{{ initial(p.name) }}</template>
+                </span>
+                <span class="who">{{ p.name }}</span>
+                <Icon v-if="p.id === room.hostId" name="crown" :size="15" class="host" />
+                <span v-if="p.id === me.id" class="you">You</span>
+                <button v-if="isHost && !p.bot && p.id !== me.id" class="kick" :aria-label="`Remove ${p.name}`" title="Remove" @click="actions.kick(p.id)">
+                  <Icon name="close" :size="14" />
+                </button>
+              </li>
+              <li v-if="!teamPlayers(t.team).length" class="nobody">Nobody yet</li>
+            </ul>
+            <button v-if="!spectating && me.team !== t.team" class="btn small switch" @click="actions.switchTeam(t.team)">
+              <Icon name="swap" :size="16" /> Switch
+            </button>
+            <p v-else-if="!spectating" class="job">Your job: <strong>{{ t.verb }}</strong></p>
+          </section>
+        </div>
+
+        <section class="card settings">
+          <header class="card-head">
+            <h2 class="label">Settings</h2>
+            <span v-if="!isHost" class="count">Host only</span>
+          </header>
+          <div class="setting">
+            <span class="setting-name">First to<small>Rounds needed to win</small></span>
+            <div class="segmented">
+              <button v-for="n in [3, 5, 7] as const" :key="n" :class="{ on: room.settings.roundsToWin === n }" :disabled="!isHost" @click="actions.settings({ roundsToWin: n })">{{ n }}</button>
+            </div>
+          </div>
+          <div class="setting">
+            <span class="setting-name">Tong the bot<small>Fills in for missing players</small></span>
+            <div class="segmented">
+              <button v-for="b in bots" :key="b" :class="{ on: room.settings.bot === b }" :disabled="!isHost" @click="actions.settings({ bot: b })">{{ b }}</button>
+            </div>
+          </div>
+          <div class="setting">
+            <span class="setting-name">Double time<small>Random bursts where presses count ×2</small></span>
+            <div class="segmented">
+              <button :class="{ on: room.settings.frenzy }" :disabled="!isHost" @click="actions.settings({ frenzy: true })">On</button>
+              <button :class="{ on: !room.settings.frenzy }" :disabled="!isHost" @click="actions.settings({ frenzy: false })">Off</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card chat">
+          <header class="card-head">
+            <h2 class="label">Chat</h2>
+          </header>
+          <ul ref="chatList">
+            <li v-if="!state.chat.length" class="nobody">Talk some trash before the game.</li>
+            <li v-for="m in state.chat" :key="m.at + m.id">
+              <strong :class="m.team">{{ m.name }}</strong>{{ m.text }}
             </li>
           </ul>
-          <button v-if="!spectating && me.team !== t.team" class="btn small" @click="actions.switchTeam(t.team)">Switch to {{ t.label.toLowerCase() }}</button>
-          <p v-else-if="!spectating" class="muted">Your job: {{ t.verb }}</p>
-        </div>
-      </div>
+          <form v-if="!spectating" @submit.prevent="say">
+            <input v-model="draft" maxlength="140" placeholder="Say something…" enterkeyhint="send" aria-label="Message" />
+            <button class="btn icon-btn" :disabled="!draft.trim()" aria-label="Send"><Icon name="send" :size="18" /></button>
+          </form>
+        </section>
 
-      <div class="panel settings">
-        <h2>Settings <small v-if="!isHost" class="muted">· host only</small></h2>
-        <div class="setting">
-          <span>First to</span>
-          <div class="segmented">
-            <button v-for="n in [3, 5, 7] as const" :key="n" :class="{ on: room.settings.roundsToWin === n }" :disabled="!isHost" @click="actions.settings({ roundsToWin: n })">{{ n }}</button>
+        <div class="lobby-cta">
+          <button v-if="isHost" class="btn primary hero-btn" @click="actions.start()"><span>Start game</span></button>
+          <div v-else-if="spectating" class="card tv-join">
+            <span class="label">Join on your phone</span>
+            <strong>{{ inviteUrl }}</strong>
           </div>
-        </div>
-        <div class="setting">
-          <span>Tong the bot</span>
-          <div class="segmented">
-            <button v-for="b in bots" :key="b" :class="{ on: room.settings.bot === b }" :disabled="!isHost" @click="actions.settings({ bot: b })">{{ b }}</button>
-          </div>
-        </div>
-        <div class="setting">
-          <span>Double time <small class="muted">random ×2 bursts</small></span>
-          <div class="segmented">
-            <button :class="{ on: room.settings.frenzy }" :disabled="!isHost" @click="actions.settings({ frenzy: true })">on</button>
-            <button :class="{ on: !room.settings.frenzy }" :disabled="!isHost" @click="actions.settings({ frenzy: false })">off</button>
-          </div>
+          <p v-else class="waiting">Waiting for the host to start…</p>
         </div>
       </div>
-
-      <div class="panel chat">
-        <h2>Chat</h2>
-        <ul ref="chatList">
-          <li v-if="!state.chat.length" class="muted">Talk some trash before the game.</li>
-          <li v-for="m in state.chat" :key="m.at + m.id">
-            <strong :class="m.team">{{ m.name }}</strong> {{ m.text }}
-          </li>
-        </ul>
-        <form v-if="!spectating" @submit.prevent="say">
-          <input v-model="draft" maxlength="140" placeholder="Say something…" enterkeyhint="send" />
-          <button class="btn small" :disabled="!draft.trim()">Send</button>
-        </form>
-      </div>
-
-      <button v-if="isHost" class="btn primary big start" @click="actions.start()">Start game</button>
-      <div v-else-if="spectating" class="panel tv-join">
-        <span class="muted">Join on your phone</span>
-        <strong>{{ inviteUrl }}</strong>
-      </div>
-      <p v-else class="waiting">Waiting for the host to start…</p>
     </section>
 
     <!-- In game (the original layout) --------------------------------------- -->
     <section v-else class="hud">
       <div v-if="spectating" class="corner tl">
-        <p>📺 Watching</p>
-        <p class="small-text">Join with code</p>
+        <p>Watching</p>
+        <p class="sub">Join with code</p>
         <p class="tv-code">{{ room.id }}</p>
       </div>
       <div v-else class="corner tl">
         <p>{{ touch ? 'Tap' : 'Spacebar' }}</p>
-        <p class="small-text">{{ me.team === 'creators' ? 'Add segment' : 'Remove segment' }}</p>
-        <div class="pps" :class="{ fire: pps >= 10 }"><strong>{{ pps }}</strong>/s · {{ state.myPresses }} presses</div>
-        <Transition name="pop"><div v-if="pps >= 10" class="on-fire">🔥 On fire</div></Transition>
+        <p class="sub">{{ me.team === 'creators' ? 'Add segment' : 'Remove segment' }}</p>
+        <div class="pps" :class="{ fire: pps >= 10 }"><strong>{{ pps }}</strong>/s<span class="dot">·</span>{{ state.myPresses }}</div>
+        <Transition name="pop"><div v-if="pps >= 10" class="on-fire">On fire</div></Transition>
       </div>
 
-      <div class="corner tr music" v-if="state.track">
-        <p class="track-name">{{ state.track.track }}</p>
-        <p class="small-text">{{ state.track.artist }}</p>
-        <div class="icons">
-          <button class="icon" @click="toggleMute" :aria-label="muted ? 'Unmute' : 'Mute'">{{ muted ? '🔇' : '🔊' }}</button>
-          <button class="icon" @click="actions.skip()" aria-label="Skip track">⏭</button>
+      <div v-if="state.track" class="corner tr music">
+        <div class="np">
+          <p class="track-name">{{ state.track.track }}</p>
+          <p class="sub">{{ state.track.artist }}</p>
+        </div>
+        <div class="np-buttons">
+          <button class="round-btn" :aria-label="muted ? 'Unmute' : 'Mute'" @click="toggleMute"><Icon :name="muted ? 'mute' : 'volume'" :size="18" /></button>
+          <button class="round-btn" aria-label="Skip track" @click="actions.skip()"><Icon name="skip" :size="18" /></button>
         </div>
       </div>
 
@@ -188,9 +216,9 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
       </div>
 
       <div class="scores">
-        <h3 class="white">Destroyers {{ room.score.destroyers }}</h3>
-        <span class="target">first to {{ room.settings.roundsToWin }}</span>
-        <h3>{{ room.score.creators }} Creators</h3>
+        <div class="score destroyers"><span>Destroyers</span><strong>{{ room.score.destroyers }}</strong></div>
+        <span class="target">First to {{ room.settings.roundsToWin }}</span>
+        <div class="score creators"><strong>{{ room.score.creators }}</strong><span>Creators</span></div>
       </div>
 
       <Transition name="pop">
@@ -198,21 +226,21 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
       </Transition>
 
       <Transition name="pop">
-        <div v-if="frenzyLeft > 0" class="frenzy">
+        <div v-if="frenzyLeft > 0" class="banner frenzy">
           <strong>Double time</strong>
           <span>×2 · {{ frenzyLeft.toFixed(1) }}s</span>
         </div>
       </Transition>
 
       <Transition name="pop">
-        <div v-if="surging && state.surge" class="surge" :class="state.surge.team">
+        <div v-if="surging && state.surge" class="banner surge" :class="state.surge.team">
           <strong>Surge!</strong>
           <span>+6 to the {{ state.surge.team }}</span>
         </div>
       </Transition>
 
-      <div v-if="!spectating" class="reactions panel">
-        <button v-for="(e, i) in EMOJI" :key="e" :title="touch ? undefined : `Press ${i + 1}`" @click="actions.react(e)">{{ e }}</button>
+      <div v-if="!spectating" class="reactions">
+        <button v-for="(e, i) in EMOJI" :key="e" :title="touch ? undefined : `Press ${i + 1}`" :aria-label="`React ${e}`" @click="actions.react(e)">{{ e }}</button>
       </div>
     </section>
 
@@ -238,27 +266,33 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
     <!-- Results ----------------------------------------------------------- -->
     <Transition name="fade">
       <div v-if="state.showResults && results" class="results-backdrop">
-        <section class="panel results">
-          <p class="muted">Game over · {{ results.score.destroyers }}–{{ results.score.creators }}</p>
+        <section class="card results">
+          <p class="label">Game over</p>
           <h1 :class="results.winner">{{ results.winner }} win</h1>
+          <p class="final">
+            <span class="destroyers">{{ results.score.destroyers }}</span>
+            <span class="dash">–</span>
+            <span class="creators">{{ results.score.creators }}</span>
+          </p>
           <p v-if="!spectating" class="verdict">{{ results.winner === me.team ? 'You won! 🎉' : 'How unfortunate.' }}</p>
-          <table>
-            <thead>
-              <tr><th>Player</th><th>Presses</th><th>Fastest</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="p in sortedResults" :key="p.id" :class="[p.team, { me: p.id === me.id }]">
-                <td>
-                  {{ p.name }}
+          <ol class="result-list">
+            <li v-for="p in sortedResults" :key="p.id" :class="[p.team, { me: p.id === me.id }]">
+              <span class="avatar" :class="{ bot: p.bot }">
+                <Icon v-if="p.bot" name="bot" :size="16" />
+                <template v-else>{{ initial(p.name) }}</template>
+              </span>
+              <span class="who">
+                {{ p.name }}
+                <span v-if="awards.get(p.id)" class="badges">
                   <span v-for="badge in awards.get(p.id)" :key="badge" class="badge">{{ badge }}</span>
-                </td>
-                <td>{{ p.presses }}</td>
-                <td>{{ p.bot ? '—' : `${p.peakPps}/s` }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div class="row">
-            <button class="btn ghost" @click="actions.leave()">Leave</button>
+                </span>
+              </span>
+              <span class="stat"><strong>{{ p.presses }}</strong><small>presses</small></span>
+              <span class="stat"><strong>{{ p.bot ? '—' : p.peakPps }}</strong><small>best /s</small></span>
+            </li>
+          </ol>
+          <div class="actions">
+            <button class="btn" @click="actions.leave()">Leave</button>
             <button class="btn primary" @click="state.showResults = false">Back to lobby</button>
           </div>
         </section>

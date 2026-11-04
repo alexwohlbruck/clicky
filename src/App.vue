@@ -27,7 +27,7 @@ addEventListener('keydown', (event) => {
 function onPointer(event: PointerEvent) {
   if (introGesture()) return
   const target = event.target as HTMLElement
-  if (target.closest('button, input, a, select, .panel')) return
+  if (target.closest('button, input, a, select, .card, .reactions')) return
   if (state.screen === 'room' && state.room?.phase === 'playing') {
     event.preventDefault()
     actions.press()
@@ -36,7 +36,7 @@ function onPointer(event: PointerEvent) {
 </script>
 
 <template>
-  <div id="stage" @pointerdown="onPointer">
+  <div id="stage" :class="`screen-${state.screen}`" @pointerdown="onPointer">
     <canvas id="fx" ref="canvas"></canvas>
     <div id="frame"></div>
 

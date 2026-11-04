@@ -250,6 +250,7 @@ const smoothstep = (a: number, b: number, x: number) => {
 }
 
 let last = performance.now()
+let menu = 0
 let lastSplit = ''
 
 /** The bar as drawn: eases toward the server's count plus our unconfirmed presses. */
@@ -314,9 +315,11 @@ function frame(now: number) {
     u.strobe.value = flash?.player.dark ? 1 : 0
     stage.fringe.value = (0.0005 + chaos * 0.005 + trauma * 0.006) * intensity
     u.grain.value = intensity
+    menu += ((state.screen === 'intro' || inGame ? 0 : 1) - menu) * (1 - Math.exp(-dt * 5))
+    u.menu.value = menu
 
     // A slow drizzle of sparks off the seam between screens.
-    if (!inGame && state.screen !== 'intro' && Math.random() < dt * 5) {
+    if (!inGame && state.screen !== 'intro' && Math.random() < dt * 2) {
       emit({ x: frameRect.x + frameRect.w * u.boundary.value, y: frameRect.y + Math.random() * frameRect.h, count: 5, kind: Kind.Spark, speed: 140, angle: -Math.PI / 2, spread: 2.5, height: 20, life: 1.6, size: 7 })
     }
 

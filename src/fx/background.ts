@@ -57,6 +57,8 @@ export function backgroundUniforms() {
     frenzy: uniform(0),
     /** Surge orb: position along the bar (0 to 1) and how visible it is. */
     orb: uniform(new Vector2(0.5, 0)),
+    /** Menus: the halves sink back so the panels on top read cleanly. */
+    menu: uniform(0),
   }
 }
 
@@ -118,8 +120,11 @@ export function backgroundNode(u: BackgroundUniforms) {
     const rainbow = vec3(0, 0.33, 0.67).add(t.mul(0.9)).add(fx).add(p.y.mul(0.0015)).mul(6.2832).cos().mul(0.5).add(0.5)
     half.assign(mix(half, rainbow, u.frenzy.mul(0.45)))
 
+    // In menus the halves dim toward the frame colour, keeping a hint of each team.
+    half.assign(mix(half, mix(dark, half, 0.38), u.menu))
+
     const seam = exp(abs(fx.sub(seamX)).mul(u.frame.z).div(u.chaos.mul(12).add(2)).negate())
-    half.addAssign(white.mul(seam.mul(u.chaos.mul(0.9).add(0.15))))
+    half.addAssign(white.mul(seam.mul(u.chaos.mul(0.9).add(0.15)).mul(u.menu.mul(-0.5).add(1))))
 
     // The bar: a white band with the pink fill running to the tip.
     const inBand = inside(p, u.bar)
