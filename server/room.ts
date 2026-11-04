@@ -61,6 +61,7 @@ export class Room {
   readonly id: string
   readonly public: boolean
   private seats = new Map<string, Seat>()
+  private spectators = new Map<string, (message: ServerMessage) => void>()
   private bot: Player | null = null
   private botNextPressAt = 0
   private botPresses = 0
@@ -105,6 +106,10 @@ export class Room {
     return this.seats.size
   }
 
+  get empty() {
+    return this.seats.size === 0 && this.spectators.size === 0
+  }
+
   get frenzy() {
     return this.frenzyUntil > 0
   }
@@ -112,6 +117,7 @@ export class Room {
   snapshot(): RoomSnapshot {
     return {
       id: this.id,
+      spectators: this.spectators.size,
       public: this.public,
       hostId: this.hostId,
       players: this.players,
@@ -136,7 +142,17 @@ export class Room {
     return player
   }
 
+  /** Watch without playing: everything a player sees, nothing to press. */
+  watch(id: string, send: (message: ServerMessage) => void, now: number) {
+    this.spectators.set(id, send)
+    send({ t: 'welcome', you: null, room: this.snapshot() })
+    send({ t: 'track', track: this.track, elapsedMs: now - this.trackStartedAt })
+    for (const message of this.chat) send({ t: 'chat', message })
+    this.broadcastRoom(id)
+  }
+
   leave(id: string, now: number) {
+    if (this.spectators.delete(id)) return this.broadcastRoom()
     if (!this.seats.delete(id)) return
     if (this.hostId === id) this.hostId = this.seats.keys().next().value ?? null
     this.seatBot(now)
@@ -412,5 +428,6 @@ export class Room {
 
   private broadcast(message: ServerMessage, exceptId?: string) {
     for (const [id, seat] of this.seats) if (id !== exceptId) seat.send(message)
+    for (const [id, send] of this.spectators) if (id !== exceptId) send(message)
   }
 }

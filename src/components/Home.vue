@@ -4,7 +4,8 @@ import type { LeaderboardEntry, RoomListing } from '../../shared/protocol'
 import { ACHIEVEMENTS } from '../game/achievements'
 import { actions, state } from '../game/store'
 
-const code = ref(new URLSearchParams(location.search).get('room') ?? '')
+const params = new URLSearchParams(location.search)
+const code = ref(params.get('room') ?? params.get('watch') ?? '')
 const rooms = ref<RoomListing[]>([])
 const board = ref<Record<'wins' | 'presses' | 'peakPps', LeaderboardEntry[]> | null>(null)
 const boardTab = ref<'wins' | 'presses' | 'peakPps'>('wins')
@@ -32,6 +33,8 @@ async function refresh() {
 
 let timer = 0
 onMounted(() => {
+  // A TV link goes straight to the room.
+  if (params.get('watch')) actions.watch(params.get('watch')!)
   void refresh()
   timer = window.setInterval(refresh, 4000)
   if (!named.value) nameInput.value?.focus()
@@ -74,6 +77,7 @@ const phaseLabel = { lobby: 'In lobby', countdown: 'Starting', playing: 'Playing
         <form class="join" @submit.prevent="needName(() => actions.joinRoom(code))">
           <input v-model="code" maxlength="4" placeholder="CODE" class="code" aria-label="Room code" />
           <button class="btn" :disabled="code.length !== 4">Join</button>
+          <button type="button" class="btn ghost" :disabled="code.length !== 4" title="Show this room on a big screen" @click="actions.watch(code)">📺</button>
         </form>
       </div>
     </section>
@@ -86,6 +90,7 @@ const phaseLabel = { lobby: 'In lobby', countdown: 'Starting', playing: 'Playing
           <span class="room-code">{{ room.id }}</span>
           <span class="muted">{{ phaseLabel[room.phase] }} · {{ room.players }}/10</span>
           <span class="score" v-if="room.phase !== 'lobby'">{{ room.score.destroyers }}–{{ room.score.creators }}</span>
+          <button class="btn small ghost" title="Watch on a big screen" @click="actions.watch(room.id)">📺</button>
           <button class="btn small" @click="needName(() => actions.joinRoom(room.id))">Join</button>
         </li>
       </ul>

@@ -46,6 +46,8 @@ export interface Track {
 
 export interface RoomSnapshot {
   id: string
+  /** People watching on a big screen, not playing. */
+  spectators: number
   public: boolean
   hostId: string | null
   players: Player[]
@@ -98,7 +100,8 @@ export interface LeaderboardEntry {
 }
 
 export type ServerMessage =
-  | { t: 'welcome'; you: Player; room: RoomSnapshot }
+  /** `you` is null when watching rather than playing. */
+  | { t: 'welcome'; you: Player | null; room: RoomSnapshot }
   | { t: 'room'; room: RoomSnapshot }
   /** Sent at most once per tick, with the presses that produced the change. */
   | { t: 'state'; count: number; presses: Score; tally: Record<string, number> }
@@ -117,7 +120,7 @@ export type ServerMessage =
 
 export type ClientMessage =
   /** `room` joins that code; `create` opens a new room; neither is quick play. */
-  | { t: 'join'; name: string; room?: string; create?: boolean }
+  | { t: 'join'; name: string; room?: string; create?: boolean; watch?: boolean }
   | { t: 'press' }
   | { t: 'skip' }
   | { t: 'team'; team: Team }

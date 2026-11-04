@@ -5,7 +5,10 @@ import { display, sound } from '../game/effects'
 import { actions, state } from '../game/store'
 
 const room = computed(() => state.room!)
-const me = computed(() => state.me!)
+/** Spectators get a stand-in so the layout can read a team; nothing they do is sent. */
+const spectating = computed(() => !state.me)
+const me = computed(() => state.me ?? { id: '', name: '', team: 'creators' as Team })
+const inviteUrl = computed(() => `${location.host}${location.pathname}?room=${room.value.id}`)
 const isHost = computed(() => room.value.hostId === me.value?.id)
 const inLobby = computed(() => room.value.phase === 'lobby')
 const touch = matchMedia('(pointer: coarse)').matches
@@ -105,8 +108,8 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
               <button v-if="isHost && !p.bot && p.id !== me.id" class="kick" :aria-label="`Remove ${p.name}`" @click="actions.kick(p.id)">✕</button>
             </li>
           </ul>
-          <button v-if="me.team !== t.team" class="btn small" @click="actions.switchTeam(t.team)">Switch to {{ t.label.toLowerCase() }}</button>
-          <p v-else class="muted">Your job: {{ t.verb }}</p>
+          <button v-if="!spectating && me.team !== t.team" class="btn small" @click="actions.switchTeam(t.team)">Switch to {{ t.label.toLowerCase() }}</button>
+          <p v-else-if="!spectating" class="muted">Your job: {{ t.verb }}</p>
         </div>
       </div>
 
@@ -141,19 +144,28 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
             <strong :class="m.team">{{ m.name }}</strong> {{ m.text }}
           </li>
         </ul>
-        <form @submit.prevent="say">
+        <form v-if="!spectating" @submit.prevent="say">
           <input v-model="draft" maxlength="140" placeholder="Say something…" enterkeyhint="send" />
           <button class="btn small" :disabled="!draft.trim()">Send</button>
         </form>
       </div>
 
       <button v-if="isHost" class="btn primary big start" @click="actions.start()">Start game</button>
+      <div v-else-if="spectating" class="panel tv-join">
+        <span class="muted">Join on your phone</span>
+        <strong>{{ inviteUrl }}</strong>
+      </div>
       <p v-else class="waiting">Waiting for the host to start…</p>
     </section>
 
     <!-- In game (the original layout) --------------------------------------- -->
     <section v-else class="hud">
-      <div class="corner tl">
+      <div v-if="spectating" class="corner tl">
+        <p>📺 Watching</p>
+        <p class="small-text">Join with code</p>
+        <p class="tv-code">{{ room.id }}</p>
+      </div>
+      <div v-else class="corner tl">
         <p>{{ touch ? 'Tap' : 'Spacebar' }}</p>
         <p class="small-text">{{ me.team === 'creators' ? 'Add segment' : 'Remove segment' }}</p>
         <div class="pps" :class="{ fire: pps >= 10 }"><strong>{{ pps }}</strong>/s · {{ state.myPresses }} presses</div>
@@ -170,7 +182,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
       </div>
 
       <div class="middle">
-        <h2 class="call">{{ me.team === 'creators' ? 'create' : 'destroy' }}</h2>
+        <h2 class="call" :style="{ visibility: spectating ? 'hidden' : undefined }">{{ me.team === 'creators' ? 'create' : 'destroy' }}</h2>
         <div id="bar"></div>
         <h1 class="percent">{{ percent }}%</h1>
       </div>
@@ -199,7 +211,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
         </div>
       </Transition>
 
-      <div class="reactions panel">
+      <div v-if="!spectating" class="reactions panel">
         <button v-for="(e, i) in EMOJI" :key="e" :title="touch ? undefined : `Press ${i + 1}`" @click="actions.react(e)">{{ e }}</button>
       </div>
     </section>
@@ -229,7 +241,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
         <section class="panel results">
           <p class="muted">Game over · {{ results.score.destroyers }}–{{ results.score.creators }}</p>
           <h1 :class="results.winner">{{ results.winner }} win</h1>
-          <p class="verdict">{{ results.winner === me.team ? 'You won! 🎉' : 'How unfortunate.' }}</p>
+          <p v-if="!spectating" class="verdict">{{ results.winner === me.team ? 'You won! 🎉' : 'How unfortunate.' }}</p>
           <table>
             <thead>
               <tr><th>Player</th><th>Presses</th><th>Fastest</th></tr>

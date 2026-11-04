@@ -500,6 +500,21 @@ h3,
   }
 }
 
+.tv-join {
+  align-self: center;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tv-join strong {
+  font-size: 1.4rem;
+  user-select: text;
+}
+.tv-code {
+  font-size: 2.6rem;
+  letter-spacing: 8px;
+}
 .kick {
   margin-left: auto;
   border: 0;

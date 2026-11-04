@@ -266,8 +266,8 @@ function frame(now: number) {
 
   const inGame = playing()
   let target = START / MAX
-  if (inGame && state.room && state.me) {
-    const optimistic = state.room.phase === 'playing' ? state.unconfirmed * (state.me.team === 'creators' ? 1 : -1) : 0
+  if (inGame && state.room) {
+    const optimistic = state.me && state.room.phase === 'playing' ? state.unconfirmed * (state.me.team === 'creators' ? 1 : -1) : 0
     target = Math.min(MAX, Math.max(0, state.room.count + optimistic)) / MAX
   }
   shown += (target - shown) * (1 - Math.exp(-dt * 22))

@@ -130,6 +130,11 @@ const server = Bun.serve<SocketData>({
             send({ t: 'error', message: `No room called ${String(message.room).toUpperCase()}` })
             return
           }
+          if (message.watch) {
+            socket.data.roomId = joined.id
+            joined.watch(id, send, now)
+            return
+          }
           if (joined.humanCount >= ROOM_CAPACITY) {
             send({ t: 'error', message: 'That room is full' })
             return
@@ -169,7 +174,7 @@ const server = Bun.serve<SocketData>({
       const room = socket.data.roomId ? rooms.get(socket.data.roomId) : undefined
       if (!room) return
       room.leave(socket.data.id, Date.now())
-      if (room.humanCount === 0) rooms.delete(room.id)
+      if (room.empty) rooms.delete(room.id)
     },
   },
 })

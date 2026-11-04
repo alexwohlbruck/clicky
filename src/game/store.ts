@@ -145,6 +145,8 @@ export const actions = {
   quickPlay: () => join({ t: 'join', name: state.profile.name }),
   createRoom: () => join({ t: 'join', name: state.profile.name, create: true }),
   joinRoom: (code: string) => join({ t: 'join', name: state.profile.name, room: code.trim().toUpperCase() }),
+  /** Put a room up on a big screen without taking a seat. */
+  watch: (code: string) => join({ t: 'join', name: '', room: code.trim().toUpperCase(), watch: true }),
   leave() {
     pendingJoin = null
     state.results = null
@@ -195,7 +197,7 @@ function receive(message: ServerMessage) {
       state.tally = {}
       state.screen = 'room'
       pendingJoin = null
-      history.replaceState(null, '', `?room=${message.room.id}`)
+      history.replaceState(null, '', `?${message.you ? 'room' : 'watch'}=${message.room.id}`)
       break
 
     case 'room':
@@ -205,13 +207,13 @@ function receive(message: ServerMessage) {
 
     case 'state': {
       const { room, me } = state
-      if (!room || !me) return
+      if (!room) return
       room.count = message.count
       state.tally = message.tally
       // Our own presses already burst when we pressed; only show the rest.
       for (const team of ['creators', 'destroyers'] as const) {
         let others = message.presses[team]
-        if (team === me.team) {
+        if (team === me?.team) {
           const ours = Math.min(state.unconfirmed, others)
           state.unconfirmed -= ours
           others -= ours
