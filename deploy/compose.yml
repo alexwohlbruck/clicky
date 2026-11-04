@@ -1,0 +1,26 @@
+services:
+  clicky:
+    container_name: clicky
+    image: ghcr.io/alexwohlbruck/clicky-2:latest
+    restart: unless-stopped
+    environment:
+      # Jukebox is on the same Caddy network, so skip the public round trip.
+      JUKEBOX_URL: http://jukebox:8080
+    volumes:
+      # The all-time leaderboard.
+      - ./data:/data
+    networks:
+      - caddy
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  caddy:
+    external: true
+    name: opt_caddy
