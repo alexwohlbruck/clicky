@@ -21,6 +21,7 @@ const percent = ref(50)
 const countdown = ref(0)
 const pps = ref(0)
 const frenzyLeft = ref(0)
+const surging = ref(false)
 let raf = 0
 function tick() {
   const now = performance.now()
@@ -28,6 +29,7 @@ function tick() {
   countdown.value = Math.max(0, Math.ceil((state.countdownEndsAt - now) / 1000))
   pps.value = state.myRecent.filter((at) => now - at < 1000).length
   frenzyLeft.value = Math.max(0, (state.frenzyUntil - now) / 1000)
+  surging.value = !!state.surge && state.surge.until > now
   raf = requestAnimationFrame(tick)
 }
 onMounted(() => (raf = requestAnimationFrame(tick)))
@@ -187,6 +189,13 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
         <div v-if="frenzyLeft > 0" class="frenzy">
           <strong>Double time</strong>
           <span>×2 · {{ frenzyLeft.toFixed(1) }}s</span>
+        </div>
+      </Transition>
+
+      <Transition name="pop">
+        <div v-if="surging && state.surge" class="surge" :class="state.surge.team">
+          <strong>Surge!</strong>
+          <span>+6 to the {{ state.surge.team }}</span>
         </div>
       </Transition>
 

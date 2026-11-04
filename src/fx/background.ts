@@ -55,6 +55,8 @@ export function backgroundUniforms() {
     grain: uniform(1),
     /** Double time: the halves cycle through a rainbow. */
     frenzy: uniform(0),
+    /** Surge orb: position along the bar (0 to 1) and how visible it is. */
+    orb: uniform(new Vector2(0.5, 0)),
   }
 }
 
@@ -135,6 +137,18 @@ export function backgroundNode(u: BackgroundUniforms) {
     )
     scene.addAssign(vec3(1.4, 0.5, 0.8).mul(tipGlow).mul(u.pulseCreators.add(u.pulseDestroyers).mul(1.5).add(0.6)))
     scene.addAssign(white.mul(ring.mul(0.35)))
+
+    // The surge orb: a gold core with a halo that throbs.
+    const orbCenter = vec2(u.bar.x.add(u.bar.z.mul(u.orb.x)), barMid)
+    const orbDistance = p.sub(orbCenter).length()
+    const throb = sin(t.mul(9)).mul(0.5).add(0.5)
+    // A dark rim keeps it readable against the white band.
+    const orbRim = smoothstep(21, 19, orbDistance)
+    const orbCore = smoothstep(17, 15, orbDistance)
+    const orbHalo = exp(orbDistance.sub(18).max(0).div(throb.mul(10).add(10)).negate()).mul(orbRim.oneMinus())
+    scene.assign(mix(scene, dark, orbRim.mul(u.orb.y)))
+    scene.assign(mix(scene, vec3(1, 0.62, 0.05).mul(throb.mul(0.5).add(1)), orbCore.mul(u.orb.y)))
+    scene.addAssign(vec3(1, 0.6, 0.1).mul(orbHalo.mul(u.orb.y).mul(0.5)))
 
     const framed = mix(dark, scene, inFrame).toVar()
 

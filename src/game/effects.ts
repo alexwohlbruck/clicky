@@ -25,6 +25,7 @@ let shockStrength = 0
 let shockOrigin = { x: 0, y: 0 }
 let frenzy = 0
 let intensity = 1
+let orbShown = 0
 
 let flash: { player: Flash; clock: () => number } | null = null
 let introStarted = false
@@ -125,6 +126,17 @@ hooks.frenzy = (active) => {
   trauma = 1
   spike = 1
   for (let i = 0; i < 4; i++) emit({ x: Math.random() * innerWidth, y: -20, count: 120, kind: i % 2 ? Kind.ConfettiCreators : Kind.ConfettiDestroyers, speed: 600, angle: Math.PI / 2, spread: 1.4, width: innerWidth / 2, life: 2.4, size: 12 })
+}
+
+hooks.surge = (team, at) => {
+  const x = barRect.x + (barRect.w * at) / MAX
+  const y = barRect.y + barRect.h / 2
+  shock(x, y, 1)
+  trauma = Math.min(1, trauma + 0.6)
+  spike = Math.max(spike, 0.8)
+  emit({ x, y, count: 350, kind: Kind.Spark, speed: 1500, life: 1, size: 12 })
+  emit({ x, y, count: 120, kind: team === 'creators' ? Kind.ConfettiCreators : Kind.ConfettiDestroyers, speed: 900, angle: -Math.PI / 2, spread: 2.4, life: 1.8, size: 11 })
+  sound.roundOver(team === state.me?.team)
 }
 
 hooks.track = (track, elapsedMs) => sound.playTrack(track, elapsedMs)
@@ -291,6 +303,10 @@ function frame(now: number) {
     u.shock.value.set(shockOrigin.x, shockOrigin.y, (now - shockAt) / 1000, shockStrength)
     u.beat.value = sound.beat()
     u.frenzy.value = frenzy
+    // The orb fades in where it spawns and out when it's taken.
+    orbShown += ((inGame && state.orb !== null ? 1 : 0) - orbShown) * (1 - Math.exp(-dt * 10))
+    if (state.orb !== null) u.orb.value.x = state.orb / MAX
+    u.orb.value.y = orbShown
     u.flash.value = state.screen === 'intro' || flash ? 1 : 0
     u.strobe.value = flash?.player.dark ? 1 : 0
     stage.fringe.value = (0.0005 + chaos * 0.005 + trauma * 0.006) * intensity

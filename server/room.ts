@@ -3,6 +3,7 @@ import {
   EMOJI,
   MAX,
   START,
+  SURGE,
   TEAMS,
   opponent,
   type BotLevel,
@@ -75,6 +76,9 @@ export class Room {
   private chat: ChatMessage[] = []
   private frenzyAt = Infinity
   private frenzyUntil = 0
+  /** Where the surge orb sits on the bar, in segments, and when the next one appears. */
+  orb: number | null = null
+  private orbAt = Infinity
 
   private tracks: Track[]
   private trackIndex: number
@@ -230,6 +234,8 @@ export class Room {
         this.endFrenzy()
       }
 
+      if (this.orb === null && now >= this.orbAt) this.spawnOrb()
+
       if (this.bot && now >= this.botNextPressAt) {
         this.botPresses++
         this.move(this.bot.team, now)
@@ -251,8 +257,17 @@ export class Room {
 
   private move(team: Team, now: number) {
     const step = this.frenzy ? 2 : 1
+    const before = this.count
     this.pending[team]++
     this.count += team === 'creators' ? step : -step
+
+    // Pushing the bar through the orb takes it, and a surge with it.
+    if (this.orb !== null && (before - this.orb) * (this.count - this.orb) <= 0 && before !== this.orb) {
+      this.orb = null
+      this.orbAt = now + this.orbDelay()
+      this.count += team === 'creators' ? SURGE : -SURGE
+      this.broadcast({ t: 'orb', at: null, by: team })
+    }
 
     if (this.count >= MAX - 1) this.endRound('creators', now)
     else if (this.count <= 1) this.endRound('destroyers', now)
@@ -264,6 +279,7 @@ export class Room {
     this.broadcast({ t: 'state', count: this.count, presses: this.pending, tally: this.tally() })
     this.pending = { creators: 0, destroyers: 0 }
     this.endFrenzy()
+    this.clearOrb()
 
     this.score[winner]++
     this.winner = winner
@@ -308,6 +324,8 @@ export class Room {
     }
     if (phase === 'playing') {
       this.botNextPressAt = now + 400
+      this.clearOrb()
+      this.orbAt = now + this.orbDelay()
       // Somewhere in the middle of the round, if it lasts that long.
       this.frenzyAt = this.settings.frenzy ? now + 6000 + this.random() * 12000 : Infinity
     }
@@ -319,6 +337,26 @@ export class Room {
       count: this.count,
       countdownMs: phase === 'countdown' ? COUNTDOWN_MS : undefined,
     })
+  }
+
+  private orbDelay() {
+    return 7000 + this.random() * 7000
+  }
+
+  /** Somewhere between the 20% and 80% marks, not right under the bar's tip. */
+  private spawnOrb() {
+    let at = Math.round(20 + this.random() * 60)
+    if (Math.abs(at - this.count) < 8) at = this.count + (this.count < START ? 20 : -20)
+    this.orb = at
+    this.orbAt = Infinity
+    this.broadcast({ t: 'orb', at })
+  }
+
+  private clearOrb() {
+    this.orbAt = Infinity
+    if (this.orb === null) return
+    this.orb = null
+    this.broadcast({ t: 'orb', at: null })
   }
 
   private endFrenzy() {

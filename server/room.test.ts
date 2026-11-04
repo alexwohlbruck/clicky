@@ -178,4 +178,22 @@ describe('Room', () => {
     expect(room.humanCount).toBe(1)
     expect(inbox.get('p2')!.at(-1)).toEqual({ t: 'kicked' })
   })
+  test('pushing the bar through a surge orb jumps it forward', () => {
+    let roll = 0.9
+    const room = new Room({ id: 'ORB', public: false, tracks, now: 0, random: () => roll })
+    room.settings.frenzy = false
+    const inbox: ServerMessage[] = []
+    room.join('p1', 'p1', (m) => inbox.push(m), 0)
+    room.join('p2', 'p2', () => {}, 0)
+    room.start('p1', 0)
+    room.tick(COUNTDOWN_MS)
+    room.tick(COUNTDOWN_MS + 14_000)
+    // 20 + 0.9 * 60
+    expect(room.orb).toBe(74)
+    roll = 0.5
+    let now = COUNTDOWN_MS + 14_000
+    while (room.orb !== null) room.press('p1', (now += 100))
+    expect(room.count).toBe(74 + 6)
+    expect(inbox.find((m) => m.t === 'orb' && m.by)).toEqual({ t: 'orb', at: null, by: 'creators' })
+  })
 })

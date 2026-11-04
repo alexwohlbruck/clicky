@@ -109,6 +109,8 @@ export type ServerMessage =
   | { t: 'react'; id: string; emoji: Emoji }
   | { t: 'frenzy'; active: boolean; ms: number }
   | { t: 'chat'; message: ChatMessage }
+  /** A surge orb appeared on the bar at `at` segments, or was taken by `by`. */
+  | { t: 'orb'; at: number | null; by?: Team }
   /** The host removed you from the room. */
   | { t: 'kicked' }
   | { t: 'error'; message: string }
@@ -124,5 +126,8 @@ export type ClientMessage =
   | { t: 'react'; emoji: Emoji }
   | { t: 'chat'; text: string }
   | { t: 'kick'; id: string }
+
+/** Segments a team gains for pushing the bar through a surge orb. */
+export const SURGE = 6
 
 export const opponent = (team: Team): Team => (team === 'creators' ? 'destroyers' : 'creators')

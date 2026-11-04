@@ -61,6 +61,10 @@ export const state = reactive({
   /** Presses this game, by player id, from the server. */
   tally: {} as Record<string, number>,
   chat: [] as ChatMessage[],
+  /** The surge orb's place on the bar, in segments. */
+  orb: null as number | null,
+  /** Who took the last surge, for the banner. */
+  surge: null as { team: Team; until: number } | null,
 })
 
 /** The effects layer listens here; the store doesn't know about shaders. */
@@ -71,6 +75,7 @@ export const hooks = {
   go: () => {},
   frenzy: (_active: boolean) => {},
   track: (_track: Track, _elapsedMs: number) => {},
+  surge: (_team: Team, _at: number) => {},
 }
 
 let socket: WebSocket | null = null
@@ -204,6 +209,7 @@ function receive(message: ServerMessage) {
         state.countdownEndsAt = performance.now() + (message.countdownMs ?? 3000)
         state.myPresses = 0
         state.tally = {}
+        state.orb = null
         state.showResults = false
         hooks.countdown()
       }
@@ -251,6 +257,16 @@ function receive(message: ServerMessage) {
     case 'chat':
       state.chat = [...state.chat.slice(-49), message.message]
       break
+
+    case 'orb': {
+      const at = state.orb
+      state.orb = message.at
+      if (message.by && at !== null) {
+        state.surge = { team: message.by, until: performance.now() + 1600 }
+        hooks.surge(message.by, at)
+      }
+      break
+    }
 
     case 'kicked':
       actions.leave()

@@ -709,6 +709,30 @@ h3,
   font: 700 0.8rem var(--ui);
 }
 
+.surge {
+  position: absolute;
+  bottom: 30%;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 24px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffe082, #ffb300);
+  color: black;
+  box-shadow: 0 0 40px rgb(255 200 0 / 0.7);
+}
+.surge strong {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+}
+.surge span {
+  font: 700 0.8rem var(--ui);
+}
+
 @keyframes rainbow {
   to {
     background-position: 300% 0;
