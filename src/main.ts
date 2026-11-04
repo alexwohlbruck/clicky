@@ -230,8 +230,6 @@ async function startIntro() {
   let clock: () => number
   try {
     clock = await sound.playIntro()
-    // Label it so the mute and skip controls show while it plays.
-    sound.onTrack({ id: '', track: 'Clicky', artist: 'Intro', durationMs: 0 })
   } catch (error) {
     console.warn('Intro music unavailable', error)
     const started = performance.now()
@@ -488,8 +486,7 @@ el.mute.addEventListener('click', () => {
   sound.muted = !sound.muted
   el.mute.setAttribute('aria-pressed', String(sound.muted))
 })
-// During the intro song, skipping only ends it for you; after that it skips the room's song.
-el.skip.addEventListener('click', () => (sound.playingIntro ? sound.endIntro() : send({ t: 'skip' })))
+el.skip.addEventListener('click', () => send({ t: 'skip' }))
 
 /** Show what's playing; the intro song keeps its slot blank, as in the original. */
 sound.onTrack = (track) => {

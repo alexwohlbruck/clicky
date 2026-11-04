@@ -24,7 +24,7 @@ export class Sound {
   /** Called when the playing song changes, so the page can show it. */
   onTrack: (track: Track) => void = () => {}
 
-  /** A room's track that arrived while the intro was still playing. */
+  /** A room's track waiting for the intro song to stop. */
   private pending: { track: Track; elapsedMs: number; at: number } | null = null
   /** Once a room is choosing the music, the shuffle stops. */
   private inRoom = false
@@ -115,15 +115,6 @@ export class Sound {
 
   private introPlaying = false
 
-  get playingIntro() {
-    return this.introPlaying
-  }
-
-  /** Cut the intro song short; the queue takes over as if it had finished. */
-  endIntro() {
-    this.intro?.stop()
-  }
-
   /** The intro song plays once, then hands over to the room or the shuffle. */
   private introEnded(source: AudioBufferSourceNode) {
     if (source !== this.intro) return
@@ -143,11 +134,15 @@ export class Sound {
     this.stream(track, 0)
   }
 
-  /** Follow the room's track, joining where the room is up to. */
+  /**
+   * Follow the room's track, joining where the room is up to. Joining a game
+   * cuts the intro song short; its `onended` then starts this track.
+   */
   playTrack(track: Track, elapsedMs: number) {
     this.inRoom = true
     if (this.introPlaying) {
       this.pending = { track, elapsedMs, at: performance.now() }
+      this.intro?.stop()
       return
     }
     this.stream(track, elapsedMs)
