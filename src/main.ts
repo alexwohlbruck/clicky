@@ -225,6 +225,8 @@ async function startIntro() {
   let clock: () => number
   try {
     clock = await sound.playIntro()
+    // Label it so the mute and skip controls show while it plays.
+    sound.onTrack({ id: '', track: 'Clicky', artist: 'Intro', durationMs: 0 })
   } catch (error) {
     console.warn('Intro music unavailable', error)
     const started = performance.now()
@@ -308,9 +310,6 @@ function receive(message: ServerMessage) {
     }
 
     case 'track':
-      el.trackTitle.textContent = message.track.track
-      el.trackArtist.textContent = message.track.artist
-      el.music.hidden = screen !== 'game'
       sound.playTrack(message.track, message.elapsedMs)
       break
   }
@@ -481,7 +480,15 @@ el.mute.addEventListener('click', () => {
   sound.muted = !sound.muted
   el.mute.setAttribute('aria-pressed', String(sound.muted))
 })
-el.skip.addEventListener('click', () => send({ t: 'skip' }))
+// During the intro song, skipping only ends it for you; after that it skips the room's song.
+el.skip.addEventListener('click', () => (sound.playingIntro ? sound.endIntro() : send({ t: 'skip' })))
+
+/** Show what's playing; the intro song keeps its slot blank, as in the original. */
+sound.onTrack = (track) => {
+  el.trackTitle.textContent = track.track
+  el.trackArtist.textContent = track.artist
+  el.music.hidden = screen !== 'game'
+}
 
 /** Keep a phone's screen on while it's being mashed. */
 async function requestWakeLock() {

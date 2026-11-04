@@ -1,4 +1,5 @@
 import type { Team, Track } from '../shared/protocol'
+import playlist from '../shared/tracks.json'
 
 /**
  * Music, voice lines and press sounds through one Web Audio graph. Browsers
@@ -20,9 +21,21 @@ export class Sound {
   private noise!: AudioBuffer
   private smoothedBeat = 0
 
+  /** Called when the playing song changes, so the page can show it. */
+  onTrack: (track: Track) => void = () => {}
+
+  /** A room's track that arrived while the intro was still playing. */
+  private pending: { track: Track; elapsedMs: number; at: number } | null = null
+  /** Once a room is choosing the music, the shuffle stops. */
+  private inRoom = false
+
   constructor() {
     this.music.crossOrigin = 'anonymous'
     this.music.preload = 'auto'
+    // Before joining a room there's no queue to follow, so shuffle the playlist.
+    this.music.addEventListener('ended', () => {
+      if (!this.inRoom) this.shuffle()
+    })
   }
 
   get muted() {
@@ -80,8 +93,8 @@ export class Sound {
     const buffer = await this.introBuffer!
     const source = context.createBufferSource()
     source.buffer = buffer
-    source.loop = true
     source.connect(this.musicBus)
+    source.onended = () => this.introEnded(source)
     const startAt = context.currentTime + 0.05
     source.start(startAt)
     this.intro = source
@@ -102,16 +115,46 @@ export class Sound {
 
   private introPlaying = false
 
-  private stopIntro() {
-    this.intro?.stop()
-    this.intro?.disconnect()
-    this.intro = null
-    this.introPlaying = false
+  get playingIntro() {
+    return this.introPlaying
   }
 
-  /** Join the room's track where the room is up to. */
+  /** Cut the intro song short; the queue takes over as if it had finished. */
+  endIntro() {
+    this.intro?.stop()
+  }
+
+  /** The intro song plays once, then hands over to the room or the shuffle. */
+  private introEnded(source: AudioBufferSourceNode) {
+    if (source !== this.intro) return
+    source.disconnect()
+    this.intro = null
+    this.introPlaying = false
+
+    const pending = this.pending
+    this.pending = null
+    if (pending) this.stream(pending.track, pending.elapsedMs + performance.now() - pending.at)
+    else this.shuffle()
+  }
+
+  private shuffle() {
+    const tracks = playlist as Track[]
+    const track = tracks[Math.floor(Math.random() * tracks.length)]!
+    this.stream(track, 0)
+  }
+
+  /** Follow the room's track, joining where the room is up to. */
   playTrack(track: Track, elapsedMs: number) {
-    this.stopIntro()
+    this.inRoom = true
+    if (this.introPlaying) {
+      this.pending = { track, elapsedMs, at: performance.now() }
+      return
+    }
+    this.stream(track, elapsedMs)
+  }
+
+  private stream(track: Track, elapsedMs: number) {
+    this.onTrack(track)
     const url = new URL(`/music/${track.id}`, location.href)
     url.searchParams.set('startMs', String(Math.max(0, Math.round(elapsedMs))))
     url.searchParams.set('requestedAtMs', String(Date.now()))
