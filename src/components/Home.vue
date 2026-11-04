@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { LeaderboardEntry, RoomListing } from '../../shared/protocol'
+import { ACHIEVEMENTS } from '../game/achievements'
 import { actions, state } from '../game/store'
 
 const code = ref(new URLSearchParams(location.search).get('room') ?? '')
@@ -98,6 +99,16 @@ const phaseLabel = { lobby: 'In lobby', countdown: 'Starting', playing: 'Playing
         <div><dt>Presses</dt><dd>{{ state.profile.presses.toLocaleString() }}</dd></div>
         <div><dt>Fastest</dt><dd>{{ state.profile.peakPps }}<small>/s</small></dd></div>
       </dl>
+      <ul class="achievements">
+        <li
+          v-for="a in ACHIEVEMENTS"
+          :key="a.id"
+          :class="{ got: state.profile.achievements.includes(a.id) }"
+          :title="`${a.name}: ${a.how}`"
+        >
+          {{ a.icon }}
+        </li>
+      </ul>
     </section>
 
     <section class="panel board">

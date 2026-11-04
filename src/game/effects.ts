@@ -111,9 +111,12 @@ hooks.roundOver = (winner, gameOver) => {
 hooks.countdown = () => {
   trauma = 0.4
   shock(innerWidth / 2, innerHeight / 2, 0.6)
+  // 3, 2, 1 a second apart; GO is played when the round starts.
+  for (let i = 0; i < 3; i++) sound.blip(440, 0.15, i)
 }
 
 hooks.go = () => {
+  sound.blip(880, 0.4)
   const { x, y } = tip()
   shock(x, y, 1)
   trauma = 0.8
@@ -136,7 +139,7 @@ hooks.surge = (team, at) => {
   spike = Math.max(spike, 0.8)
   emit({ x, y, count: 350, kind: Kind.Spark, speed: 1500, life: 1, size: 12 })
   emit({ x, y, count: 120, kind: team === 'creators' ? Kind.ConfettiCreators : Kind.ConfettiDestroyers, speed: 900, angle: -Math.PI / 2, spread: 2.4, life: 1.8, size: 11 })
-  sound.roundOver(team === state.me?.team)
+  sound.coin()
 }
 
 hooks.track = (track, elapsedMs) => sound.playTrack(track, elapsedMs)

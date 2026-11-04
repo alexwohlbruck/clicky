@@ -55,6 +55,13 @@ function onPointer(event: PointerEvent) {
     </div>
 
     <Transition name="toast">
+      <div v-if="state.unlocked" :key="state.unlocked.id" class="toast achievement">
+        <span class="trophy">{{ state.unlocked.icon }}</span>
+        <span><small>Achievement unlocked</small><strong>{{ state.unlocked.name }}</strong></span>
+      </div>
+    </Transition>
+
+    <Transition name="toast">
       <div v-if="state.error" class="toast" @click="state.error = ''">{{ state.error }}</div>
     </Transition>
   </div>

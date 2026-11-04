@@ -1,4 +1,5 @@
 import { reactive, toRaw } from 'vue'
+import { ACHIEVEMENTS, earnedByGame, type Achievement } from './achievements'
 import type {
   ChatMessage,
   ClientMessage,
@@ -16,6 +17,7 @@ export type Screen = 'intro' | 'home' | 'room'
 
 export interface Profile {
   name: string
+  achievements: string[]
   games: number
   wins: number
   presses: number
@@ -32,7 +34,7 @@ export interface FloatingReaction {
 const PROFILE_KEY = 'clicky-profile'
 
 function loadProfile(): Profile {
-  const blank = { name: localStorage.getItem('clicky-name') ?? '', games: 0, wins: 0, presses: 0, peakPps: 0 }
+  const blank = { name: localStorage.getItem('clicky-name') ?? '', achievements: [] as string[], games: 0, wins: 0, presses: 0, peakPps: 0 }
   try {
     return { ...blank, ...JSON.parse(localStorage.getItem(PROFILE_KEY) ?? '{}') }
   } catch {
@@ -52,6 +54,8 @@ export const state = reactive({
   countdownEndsAt: 0,
   reactions: [] as FloatingReaction[],
   error: '',
+  /** The latest achievement, for its toast. */
+  unlocked: null as Achievement | null,
   profile: loadProfile(),
   /** Our own presses this game and in the last second, for the HUD. */
   myPresses: 0,
@@ -76,6 +80,24 @@ export const hooks = {
   frenzy: (_active: boolean) => {},
   track: (_track: Track, _elapsedMs: number) => {},
   surge: (_team: Team, _at: number) => {},
+}
+
+let unlockTimer = 0
+
+/** Record achievements, toasting any that are new. */
+export function unlock(ids: string[]) {
+  const fresh = ids.filter((id) => !state.profile.achievements.includes(id))
+  if (!fresh.length) return
+  state.profile.achievements = [...state.profile.achievements, ...fresh]
+  saveProfile()
+  // One toast at a time; a few seconds each.
+  fresh.forEach((id, i) =>
+    setTimeout(() => {
+      state.unlocked = ACHIEVEMENTS.find((a) => a.id === id) ?? null
+      clearTimeout(unlockTimer)
+      unlockTimer = window.setTimeout(() => (state.unlocked = null), 3200)
+    }, i * 3400),
+  )
 }
 
 let socket: WebSocket | null = null
@@ -230,6 +252,9 @@ function receive(message: ServerMessage) {
         profile.presses += mine.presses
         profile.peakPps = Math.max(profile.peakPps, mine.peakPps)
         saveProfile()
+        // After the results screen appears.
+        const earned = earnedByGame(profile, message.results, mine.id)
+        setTimeout(() => unlock(earned), 7000)
       }
       // Shown once the game-over flash has played, if we're still there.
       setTimeout(() => {
@@ -251,6 +276,7 @@ function receive(message: ServerMessage) {
 
     case 'frenzy':
       state.frenzyUntil = message.active ? performance.now() + message.ms : 0
+      if (message.active) unlock(['frenzy'])
       hooks.frenzy(message.active)
       break
 
@@ -263,6 +289,7 @@ function receive(message: ServerMessage) {
       state.orb = message.at
       if (message.by && at !== null) {
         state.surge = { team: message.by, until: performance.now() + 1600 }
+        if (message.by === state.me?.team) unlock(['surge'])
         hooks.surge(message.by, at)
       }
       break

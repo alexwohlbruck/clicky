@@ -203,6 +203,28 @@ export class Sound {
     }
   }
 
+  /** A short square-wave note, for the countdown and pickups. */
+  blip(frequency: number, duration = 0.12, delay = 0, level = 0.12) {
+    const context = this.context
+    if (!context) return
+    const at = context.currentTime + delay
+    const osc = context.createOscillator()
+    const gain = context.createGain()
+    osc.type = 'square'
+    osc.frequency.setValueAtTime(frequency, at)
+    gain.gain.setValueAtTime(level, at)
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
+    osc.connect(gain).connect(this.master)
+    osc.start(at)
+    osc.stop(at + duration + 0.02)
+  }
+
+  /** The surge pickup: a two-note coin. */
+  coin() {
+    this.blip(988, 0.08)
+    this.blip(1319, 0.3, 0.08)
+  }
+
   /** The original's Tong voice for a loss, and a rising stab for a win. */
   roundOver(won: boolean) {
     const context = this.context
