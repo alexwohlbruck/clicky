@@ -8,6 +8,12 @@ export class Sound {
   readonly music = new Audio()
   private context: AudioContext | null = null
   private master!: GainNode
+  /** Everything musical goes through here, so the analyser hears it. */
+  private musicBus!: GainNode
+  /** Fetched at load so the intro can start the moment it's allowed to. */
+  private introBytes = fetch('/audio/game-music.mp3').then((response) => response.arrayBuffer())
+  private introBuffer: Promise<AudioBuffer> | null = null
+  private intro: AudioBufferSourceNode | null = null
   private analyser!: AnalyserNode
   private spectrum = new Uint8Array(0)
   private voices = new Map<string, AudioBuffer>()
@@ -43,8 +49,11 @@ export class Sound {
     this.analyser.fftSize = 512
     this.analyser.smoothingTimeConstant = 0.6
     this.spectrum = new Uint8Array(this.analyser.frequencyBinCount)
-    context.createMediaElementSource(this.music).connect(this.analyser)
+    this.musicBus = context.createGain()
+    this.musicBus.connect(this.analyser)
     this.analyser.connect(this.master)
+    context.createMediaElementSource(this.music).connect(this.musicBus)
+    this.introBuffer = this.introBytes.then((bytes) => context.decodeAudioData(bytes))
 
     this.noise = context.createBuffer(1, context.sampleRate * 0.25, context.sampleRate)
     const data = this.noise.getChannelData(0)
@@ -59,14 +68,50 @@ export class Sound {
     }
   }
 
-  playIntro() {
-    this.music.loop = false
-    this.music.src = '/audio/game-music.mp3'
-    return this.music.play()
+  /**
+   * Start the intro music and return a clock for the visuals: milliseconds
+   * into the song, as of the frame being drawn reaching the screen. It reads
+   * the audio hardware's own timestamp, so speaker latency is accounted for.
+   * The `<audio>` element's currentTime only moves every 20-50 ms, too
+   * coarse for a strobe timed to the note.
+   */
+  async playIntro(): Promise<() => number> {
+    const context = this.context!
+    const buffer = await this.introBuffer!
+    const source = context.createBufferSource()
+    source.buffer = buffer
+    source.loop = true
+    source.connect(this.musicBus)
+    const startAt = context.currentTime + 0.05
+    source.start(startAt)
+    this.intro = source
+    this.introPlaying = true
+
+    // One frame ahead: what's drawn now is seen at the next refresh.
+    const FRAME_MS = 16
+    return () => {
+      const stamp = context.getOutputTimestamp?.()
+      if (stamp?.contextTime && stamp.performanceTime) {
+        const heard = stamp.contextTime + (performance.now() + FRAME_MS - stamp.performanceTime) / 1000
+        return (heard - startAt) * 1000
+      }
+      const latency = context.outputLatency || context.baseLatency || 0
+      return (context.currentTime - latency - startAt) * 1000 + FRAME_MS
+    }
+  }
+
+  private introPlaying = false
+
+  private stopIntro() {
+    this.intro?.stop()
+    this.intro?.disconnect()
+    this.intro = null
+    this.introPlaying = false
   }
 
   /** Join the room's track where the room is up to. */
   playTrack(track: Track, elapsedMs: number) {
+    this.stopIntro()
     const url = new URL(`/music/${track.id}`, location.href)
     url.searchParams.set('startMs', String(Math.max(0, Math.round(elapsedMs))))
     url.searchParams.set('requestedAtMs', String(Date.now()))
@@ -77,7 +122,7 @@ export class Sound {
 
   /** Bass energy of the music, 0 to 1, for the visuals to pulse with. */
   beat() {
-    if (!this.analyser || this.music.paused) return (this.smoothedBeat *= 0.9)
+    if (!this.analyser || (this.music.paused && !this.introPlaying)) return (this.smoothedBeat *= 0.9)
     this.analyser.getByteFrequencyData(this.spectrum)
     let sum = 0
     for (let i = 1; i < 8; i++) sum += this.spectrum[i]!

@@ -33,6 +33,7 @@ const el = {
   flash: $('flash'),
   flashText: $('flash-text'),
   flashPrompt: $('flash-prompt'),
+  flashWarning: $('flash-warning'),
 }
 
 type Screen = 'intro' | 'name' | 'game'
@@ -213,16 +214,22 @@ function show(next: Screen) {
   measure()
 }
 
-function startIntro() {
+async function startIntro() {
   introStarted = true
+  introStartedAt = performance.now()
   sound.unlock()
   el.flashPrompt.textContent = ''
-  const started = performance.now()
-  introStartedAt = started
-  // Follow the music when it plays; fall back to the wall clock when it can't.
-  let musicPlaying = false
-  sound.playIntro().then(() => (musicPlaying = true), () => {})
-  const clock = () => (musicPlaying && !sound.music.paused ? sound.music.currentTime * 1000 : performance.now() - started)
+  el.flashWarning.remove()
+
+  // Follow the music; fall back to the wall clock if it can't play.
+  let clock: () => number
+  try {
+    clock = await sound.playIntro()
+  } catch (error) {
+    console.warn('Intro music unavailable', error)
+    const started = performance.now()
+    clock = () => performance.now() - started
+  }
   playFlash(INTRO, 'clicky', onIntroEvent, clock, () => show('name'))
 }
 
@@ -361,6 +368,7 @@ const smoothstep = (a: number, b: number, x: number) => {
 
 let last = performance.now()
 let lastPercent = ''
+let lastSplit = ''
 
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000)
@@ -395,9 +403,11 @@ function frame(now: number) {
 
   // Shake and split the DOM along with the canvas.
   const shake = trauma * trauma * (touch ? 9 : 16)
-  el.root.style.setProperty('--shake-x', `${((Math.random() * 2 - 1) * shake).toFixed(1)}px`)
-  el.root.style.setProperty('--shake-y', `${((Math.random() * 2 - 1) * shake).toFixed(1)}px`)
-  el.root.style.setProperty('--split', `${(chaos * 5 + trauma * 6).toFixed(1)}px`)
+  // Only a transform on one element, and the split only when it moves, so
+  // shaking never makes the browser restyle the page.
+  el.stage.style.transform = shake > 0.05 ? `translate3d(${((Math.random() * 2 - 1) * shake).toFixed(1)}px, ${((Math.random() * 2 - 1) * shake).toFixed(1)}px, 0)` : ''
+  const split = (Math.round((chaos * 5 + trauma * 6) * 2) / 2).toFixed(1)
+  if (split !== lastSplit) el.app.style.setProperty('--split', `${(lastSplit = split)}px`)
 
   if (stage) {
     const u = stage.uniforms
@@ -433,7 +443,7 @@ function frame(now: number) {
 
 function onGesture() {
   if (screen !== 'intro') return false
-  if (!introStarted) startIntro()
+  if (!introStarted) void startIntro()
   else if (performance.now() - introStartedAt > 1200) skipIntro()
   return true
 }

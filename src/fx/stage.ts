@@ -28,7 +28,8 @@ export class Stage {
     const forceWebGL = new URLSearchParams(location.search).has('webgl')
     this.renderer = new WebGPURenderer({ canvas, antialias: false, alpha: false, forceWebGL })
     this.renderer.toneMapping = NoToneMapping
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+    // The background is procedural and soft; full retina resolution buys nothing.
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5))
 
     const material = new MeshBasicNodeMaterial({ depthWrite: false, depthTest: false })
     material.colorNode = backgroundNode(this.uniforms)

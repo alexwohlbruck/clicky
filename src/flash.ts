@@ -1,9 +1,9 @@
 /**
  * The original's flash screens, keyframe for keyframe. Times are milliseconds
- * into the sequence; the intro's were hand-timed to `game-music.mp3`.
+ * into the sequence.
  */
 export interface Frame {
-  textStyle?: Partial<Record<'fontSize' | 'transform' | 'visibility', string>>
+  textStyle?: { fontSize?: number; transform?: string; visibility?: 'visible' }
   /** `true` adds the next letter; `{ interval }` types the rest at that pace. */
   appendLetter?: true | { interval: number }
   /** Strobe period in ms, or null to hold the current colour. */
@@ -13,59 +13,71 @@ export interface Frame {
 
 export type Frames = Record<number, Frame>
 
+/**
+ * `game-music.mp3` runs on a steady grid of notes 159.57 ms apart, the first
+ * landing at 353.7 ms, until a silent break from 9288 ms that ends on a hit at
+ * 9667 ms (measured from the decoded audio). The original keyframes were timed
+ * by ear and sat 5–40 ms off the notes, drifting later as the song went on, so
+ * each one is snapped here to the note it was aiming for.
+ */
+const NOTE = 159.57
+const note = (n: number) => Math.round(353.7 + n * NOTE)
+
+/** Sizes are the original's, in em. */
 export const INTRO: Frames = {
-  0: { textStyle: { fontSize: '15em', visibility: 'visible' } },
+  0: { textStyle: { fontSize: 15, visibility: 'visible' } },
 
-  326: { appendLetter: true },
-  480: { appendLetter: true },
+  // c l . . i c k y — the letters land on the first two notes, then four in a row.
+  [note(0)]: { appendLetter: true },
+  [note(1)]: { appendLetter: true },
 
-  810: { appendLetter: true },
-  975: { appendLetter: true },
-  1130: { appendLetter: true },
-  1278: { appendLetter: true },
+  [note(3)]: { appendLetter: true },
+  [note(4)]: { appendLetter: true },
+  [note(5)]: { appendLetter: true },
+  [note(6)]: { appendLetter: true },
 
-  1611: { textStyle: { fontSize: '10em' } },
-  1766: { textStyle: { fontSize: '15em' } },
+  [note(8)]: { textStyle: { fontSize: 10 } },
+  [note(9)]: { textStyle: { fontSize: 15 } },
 
-  2080: { textStyle: { fontSize: '13em' } },
-  2234: { textStyle: { fontSize: '11em' } },
+  [note(11)]: { textStyle: { fontSize: 13 } },
+  [note(12)]: { textStyle: { fontSize: 11 } },
 
-  2565: { textStyle: { fontSize: '13em' } },
+  [note(14)]: { textStyle: { fontSize: 13 } },
 
-  2877: { textStyle: { fontSize: '11em' } },
-  3070: { textStyle: { fontSize: '10em' } },
+  [note(16)]: { textStyle: { fontSize: 11 } },
+  [note(17)]: { textStyle: { fontSize: 10 } },
 
-  3369: { textStyle: { transform: 'scaleX(1.4)' } },
-  3519: { textStyle: { transform: 'scaleX(1)' } },
-  3667: { textStyle: { transform: 'scaleY(1.4)' } },
-  3839: { textStyle: { transform: 'scaleY(1)' } },
+  [note(19)]: { textStyle: { transform: 'scaleX(1.4)' } },
+  [note(20)]: { textStyle: { transform: 'scaleX(1)' } },
+  [note(21)]: { textStyle: { transform: 'scaleY(1.4)' } },
+  [note(22)]: { textStyle: { transform: 'scaleY(1)' } },
 
-  4163: { textStyle: { fontSize: '12em', transform: 'rotate(-5deg)' } },
-  4300: { textStyle: { fontSize: '14em', transform: 'rotate(-10deg)' } },
+  [note(24)]: { textStyle: { fontSize: 12, transform: 'rotate(-5deg)' } },
+  [note(25)]: { textStyle: { fontSize: 14, transform: 'rotate(-10deg)' } },
 
-  4647: { textStyle: { fontSize: '12em', transform: 'rotate(-5deg)' } },
-  4840: { textStyle: { fontSize: '9em', transform: 'rotate(0deg)' } },
+  [note(27)]: { textStyle: { fontSize: 12, transform: 'rotate(-5deg)' } },
+  [note(28)]: { textStyle: { fontSize: 9, transform: 'rotate(0deg)' } },
 
-  5100: { flashAnimation: 315 },
+  // Strobe on every other note (the original's 315 ms)...
+  [note(30)]: { flashAnimation: NOTE * 2 },
 
-  7665: { flashAnimation: null },
-  7666: { flashAnimation: 40 },
+  // ...then four flips a note (the original's 40 ms) until the break.
+  [note(46)]: { flashAnimation: NOTE / 4 },
 
-  8943: { flashAnimation: null },
-  9637: { endFlash: true },
+  [note(54)]: { flashAnimation: null },
+  9667: { endFlash: true },
 }
 
 export const ROUND_OVER: Frames = {
-  0: { flashAnimation: 80, textStyle: { visibility: 'visible', fontSize: '10em' } },
+  0: { flashAnimation: 80, textStyle: { visibility: 'visible', fontSize: 10 } },
   300: { appendLetter: { interval: 160 } },
   3000: { endFlash: true },
 }
 
 export const GAME_OVER: Frames = {
-  0: { flashAnimation: 80, textStyle: { visibility: 'visible', fontSize: '10em' } },
+  0: { flashAnimation: 80, textStyle: { visibility: 'visible', fontSize: 10 } },
   300: { appendLetter: { interval: 160 } },
-  3200: { flashAnimation: null },
-  3201: { flashAnimation: 40 },
+  3200: { flashAnimation: 40 },
   4400: { flashAnimation: 160 },
   6200: { endFlash: true },
 }
@@ -78,17 +90,23 @@ export type FlashEvent =
   | { type: 'toggle'; dark: boolean; period: number }
   | { type: 'end' }
 
+/** The text is laid out once at this size and scaled on the GPU from there. */
+const BASE_EM = 15
+
 /**
- * Plays a sequence against a clock (the music's, when there is music) rather
- * than a pile of timeouts, so it can't drift from the beat it was timed to.
+ * Plays a sequence against a clock. Everything is worked out from the time
+ * each frame rather than stepped by timers, so a slow frame skips ahead
+ * instead of falling behind the music.
  */
 export class Flash {
   dark = false
   done = false
-  private applied = new Set<number>()
+  private next = 0
   private typed = 0
-  private strobe: { since: number; period: number } | null = null
-  private toggles = 0
+  private typing: { from: number; interval: number } | null = null
+  private strobe: { since: number; period: number; flips: number; base: boolean } | null = null
+  private size = BASE_EM
+  private transform = ''
   private times: number[]
 
   constructor(
@@ -101,61 +119,70 @@ export class Flash {
       .map(Number)
       .sort((a, b) => a - b)
     el.textContent = ''
-    el.style.cssText = 'visibility: hidden'
+    el.style.visibility = 'hidden'
+    this.paint()
   }
 
   update(ms: number) {
-    for (const at of this.times) {
-      if (at > ms || this.applied.has(at)) continue
-      this.applied.add(at)
-      this.apply(this.frames[at]!, at, ms)
-      if (this.done) return
-    }
+    // Keyframes: a size change or warp fires once a frame, however many were due.
+    let sized = false
+    let warped = false
+    while (this.next < this.times.length && this.times[this.next]! <= ms) {
+      const at = this.times[this.next++]!
+      const frame = this.frames[at]!
+      const { fontSize, transform, visibility } = frame.textStyle ?? {}
+      if (fontSize !== undefined) {
+        this.size = fontSize
+        sized ||= at > 0
+      }
+      if (transform !== undefined) {
+        this.transform = transform
+        warped = true
+      }
+      if (visibility) this.el.style.visibility = visibility
 
-    if (this.typing && ms >= this.typing.next) {
-      this.append()
-      this.typing.next += this.typing.interval
+      if (frame.appendLetter === true) this.append()
+      else if (frame.appendLetter) this.typing = { from: at, interval: frame.appendLetter.interval }
+
+      if (frame.flashAnimation === null) this.strobe = null
+      else if (frame.flashAnimation) this.strobe = { since: at, period: frame.flashAnimation, flips: 0, base: this.dark }
+
+      if (frame.endFlash) {
+        this.done = true
+        this.strobe = null
+        this.el.textContent = ''
+        this.emit({ type: 'end' })
+        return
+      }
+    }
+    if (sized) this.emit({ type: 'size' })
+    if (warped) this.emit({ type: 'warp' })
+
+    if (this.typing) {
+      const due = Math.min(this.text.length, Math.floor((ms - this.typing.from) / this.typing.interval) + 1)
+      while (this.typed < due) this.append()
       if (this.typed >= this.text.length) this.typing = null
     }
 
+    // The original flipped on every interval tick, the first one immediately,
+    // and pumped the size between 8em and 6em with it. Both stick when it stops.
     if (this.strobe) {
-      const toggles = Math.floor((ms - this.strobe.since) / this.strobe.period) + 1
-      while (this.toggles < toggles) {
-        this.toggles++
-        this.switchColors()
+      const flips = Math.floor((ms - this.strobe.since) / this.strobe.period) + 1
+      if (flips !== this.strobe.flips) {
+        this.strobe.flips = flips
+        this.dark = flips % 2 === 1 ? !this.strobe.base : this.strobe.base
+        this.size = this.dark ? 8 : 6
+        this.emit({ type: 'toggle', dark: this.dark, period: this.strobe.period })
       }
     }
+
+    this.paint()
   }
 
-  private typing: { next: number; interval: number } | null = null
-
-  private apply(frame: Frame, at: number, ms: number) {
-    if (frame.textStyle) {
-      const { fontSize, transform, visibility } = frame.textStyle
-      if (fontSize) this.el.style.fontSize = `calc(${fontSize} * var(--flash-scale, 1))`
-      if (transform !== undefined) this.el.style.transform = transform
-      if (visibility) this.el.style.visibility = visibility
-      if (fontSize && at > 0) this.emit({ type: 'size' })
-      if (transform) this.emit({ type: 'warp' })
-    }
-
-    if (frame.appendLetter === true) this.append()
-    else if (frame.appendLetter) this.typing = { next: at, interval: frame.appendLetter.interval }
-
-    if (frame.flashAnimation === null) {
-      this.strobe = null
-    } else if (frame.flashAnimation) {
-      this.strobe = { since: at, period: frame.flashAnimation }
-      this.toggles = 0
-      this.update(ms)
-    }
-
-    if (frame.endFlash) {
-      this.done = true
-      this.strobe = null
-      this.el.textContent = ''
-      this.emit({ type: 'end' })
-    }
+  private paint() {
+    const size = this.size
+    this.el.style.transform = `${this.transform} scale(${size / BASE_EM})`
+    this.el.style.color = this.dark ? 'white' : 'black'
   }
 
   private append() {
@@ -164,12 +191,5 @@ export class Flash {
     this.el.textContent += letter
     this.emit({ type: 'letter', index: this.typed })
     this.typed++
-  }
-
-  /** As in the original: swap black and white, and pump the text size. */
-  private switchColors() {
-    this.dark = !this.dark
-    this.el.style.fontSize = `calc(${this.dark ? '8em' : '6em'} * var(--flash-scale, 1))`
-    this.emit({ type: 'toggle', dark: this.dark, period: this.strobe?.period ?? 0 })
   }
 }
