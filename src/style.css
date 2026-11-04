@@ -543,6 +543,33 @@ h3,
   border-radius: 999px;
   display: inline-block;
 }
+.pps.fire {
+  background: linear-gradient(90deg, #ff006a, #ff9100);
+}
+.on-fire {
+  margin-top: 6px;
+  font-size: 1.1rem;
+  letter-spacing: 3px;
+  color: #ffb74d;
+  text-shadow: 0 0 18px rgb(255 120 0 / 0.9);
+  animation: flicker 0.18s steps(2) infinite;
+}
+@keyframes flicker {
+  50% {
+    transform: translateY(-1px) scale(1.04);
+  }
+}
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(233 30 99 / 0.25);
+  color: #ffc1d6;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .pps strong {
   font-size: 1rem;
   font-variant-numeric: tabular-nums;
@@ -799,10 +826,6 @@ h3,
 }
 .results tr.me {
   background: rgb(233 30 99 / 0.15);
-}
-.results td small {
-  color: var(--pink);
-  font-weight: 700;
 }
 .results .row {
   justify-content: center;

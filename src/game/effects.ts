@@ -53,6 +53,12 @@ function measure() {
   document.documentElement.style.setProperty('--flash-scale', String(Math.min(1, innerWidth / 1500, innerHeight / 700)))
 }
 
+/** Ten presses in the last second. */
+export const onFire = () => {
+  const now = performance.now()
+  return state.myRecent.filter((at) => now - at < 1000).length >= 10
+}
+
 const tip = () => ({ x: barRect.x + barRect.w * shown, y: barRect.y + barRect.h / 2 })
 
 function shock(x: number, y: number, strength: number) {
@@ -70,7 +76,8 @@ hooks.press = (team: Team, mine: boolean) => {
   pulse[team] = Math.min(1.5, pulse[team] + (mine ? 0.7 : 0.35))
   trauma = Math.min(1, trauma + (mine ? 0.09 : 0.04))
   pressRate += 1
-  const boost = frenzy > 0.5 ? 1.8 : 1
+  // Double time and being on fire both make every press bigger.
+  const boost = (frenzy > 0.5 ? 1.8 : 1) * (mine && onFire() ? 1.6 : 1)
 
   if (team === 'creators') {
     emit({ x, y, count: (mine ? 46 : 18) * boost, kind: Kind.Spark, speed: 900 * boost, angle: 0, spread: Math.PI * 1.7, height: 36, life: 0.75, size: 10 })

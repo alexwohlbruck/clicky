@@ -52,6 +52,18 @@ async function copyInvite() {
 
 const bots: BotLevel[] = ['off', 'easy', 'normal', 'hard']
 const results = computed(() => state.results)
+/** Badges for the results table, beyond the MVP. */
+const awards = computed(() => {
+  const players = results.value?.players.filter((p) => !p.bot) ?? []
+  const badges = new Map<string, string[]>()
+  const give = (id: string | undefined, badge: string) => id && badges.set(id, [...(badges.get(id) ?? []), badge])
+  give(results.value?.mvp ?? undefined, '👑 MVP')
+  const fastest = [...players].sort((a, b) => b.peakPps - a.peakPps)[0]
+  if (fastest?.peakPps) give(fastest.id, '⚡ Fastest fingers')
+  const most = [...players].sort((a, b) => b.presses - a.presses)[0]
+  if (most && most.id !== results.value?.mvp) give(most.id, '💪 Most presses')
+  return badges
+})
 const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a, b) => b.presses - a.presses))
 </script>
 
@@ -115,7 +127,8 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
       <div class="corner tl">
         <p>{{ touch ? 'Tap' : 'Spacebar' }}</p>
         <p class="small-text">{{ me.team === 'creators' ? 'Add segment' : 'Remove segment' }}</p>
-        <div class="pps"><strong>{{ pps }}</strong>/s · {{ state.myPresses }} presses</div>
+        <div class="pps" :class="{ fire: pps >= 10 }"><strong>{{ pps }}</strong>/s · {{ state.myPresses }} presses</div>
+        <Transition name="pop"><div v-if="pps >= 10" class="on-fire">🔥 On fire</div></Transition>
       </div>
 
       <div class="corner tr music" v-if="state.track">
@@ -151,7 +164,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
       </Transition>
 
       <div class="reactions panel">
-        <button v-for="e in EMOJI" :key="e" @click="actions.react(e)">{{ e }}</button>
+        <button v-for="(e, i) in EMOJI" :key="e" :title="touch ? undefined : `Press ${i + 1}`" @click="actions.react(e)">{{ e }}</button>
       </div>
     </section>
 
@@ -183,7 +196,10 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
             </thead>
             <tbody>
               <tr v-for="p in sortedResults" :key="p.id" :class="[p.team, { me: p.id === me.id }]">
-                <td>{{ p.id === results.mvp ? '👑 ' : '' }}{{ p.name }}<small v-if="p.id === results.mvp"> MVP</small></td>
+                <td>
+                  {{ p.name }}
+                  <span v-for="badge in awards.get(p.id)" :key="badge" class="badge">{{ badge }}</span>
+                </td>
                 <td>{{ p.presses }}</td>
                 <td>{{ p.bot ? '—' : `${p.peakPps}/s` }}</td>
               </tr>

@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import Home from './components/Home.vue'
 import Room from './components/Room.vue'
 import { introGesture, startEffects } from './game/effects'
+import { EMOJI } from '../shared/protocol'
 import { actions, state } from './game/store'
 
 const canvas = ref<HTMLCanvasElement>()
@@ -14,6 +15,9 @@ const typing = (event: Event) => (event.target as HTMLElement).closest('input, t
 
 addEventListener('keydown', (event) => {
   if (introGesture()) return
+  // 1-6 send the reactions, in the order they appear on screen.
+  const reaction = EMOJI[Number(event.key) - 1]
+  if (reaction && state.screen === 'room' && !typing(event)) actions.react(reaction)
   if (event.code === 'Space' && !event.repeat && state.screen === 'room' && !typing(event)) {
     event.preventDefault()
     actions.press()

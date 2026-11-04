@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { reactive, toRaw } from 'vue'
 import type {
   ClientMessage,
   Emoji,
@@ -116,6 +116,7 @@ export const actions = {
   joinRoom: (code: string) => join({ t: 'join', name: state.profile.name, room: code.trim().toUpperCase() }),
   leave() {
     pendingJoin = null
+    state.results = null
     state.room = null
     state.me = null
     state.showResults = false
@@ -155,6 +156,8 @@ function receive(message: ServerMessage) {
       state.me = message.you
       state.room = message.room
       state.unconfirmed = 0
+      state.results = null
+      state.showResults = false
       state.screen = 'room'
       pendingJoin = null
       history.replaceState(null, '', `?room=${message.room.id}`)
@@ -212,8 +215,10 @@ function receive(message: ServerMessage) {
         profile.peakPps = Math.max(profile.peakPps, mine.peakPps)
         saveProfile()
       }
-      // Shown once the game-over flash has played.
-      setTimeout(() => (state.showResults = true), 6200)
+      // Shown once the game-over flash has played, if we're still there.
+      setTimeout(() => {
+        if (toRaw(state.results) === message.results) state.showResults = true
+      }, 6200)
       break
     }
 
