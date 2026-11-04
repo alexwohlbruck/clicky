@@ -53,6 +53,8 @@ export function backgroundUniforms() {
     beat: uniform(0),
     /** Film grain, 0 to 1. Off while the intro is still plain black and white. */
     grain: uniform(1),
+    /** Double time: the halves cycle through a rainbow. */
+    frenzy: uniform(0),
   }
 }
 
@@ -111,6 +113,8 @@ export function backgroundNode(u: BackgroundUniforms) {
     half.addAssign(blue.mul(u.pulseCreators.mul(isBlue).mul(nearBar).mul(0.35)))
     half.mulAssign(float(1).sub(u.pulseDestroyers.mul(isBlue.oneMinus()).mul(nearBar).mul(0.3)))
     half.mulAssign(u.beat.mul(0.08).add(1))
+    const rainbow = vec3(0, 0.33, 0.67).add(t.mul(0.9)).add(fx).add(p.y.mul(0.0015)).mul(6.2832).cos().mul(0.5).add(0.5)
+    half.assign(mix(half, rainbow, u.frenzy.mul(0.45)))
 
     const seam = exp(abs(fx.sub(seamX)).mul(u.frame.z).div(u.chaos.mul(12).add(2)).negate())
     half.addAssign(white.mul(seam.mul(u.chaos.mul(0.9).add(0.15))))

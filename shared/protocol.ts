@@ -5,8 +5,21 @@ export const TEAMS: readonly Team[] = ['creators', 'destroyers']
 /** Segments in the bar. Creators win at `MAX - 1`, destroyers at 1. */
 export const MAX = 100
 export const START = MAX / 2
-export const ROUNDS_TO_WIN = 5
 export const ROOM_CAPACITY = 10
+
+export const EMOJI = ['🔥', '😂', '💀', '😤', '👏', '🫡'] as const
+export type Emoji = (typeof EMOJI)[number]
+
+export type BotLevel = 'off' | 'easy' | 'normal' | 'hard'
+
+export interface Settings {
+  roundsToWin: 3 | 5 | 7
+  bot: BotLevel
+  /** Random "double time" windows where every press counts twice. */
+  frenzy: boolean
+}
+
+export const DEFAULT_SETTINGS: Settings = { roundsToWin: 5, bot: 'normal', frenzy: true }
 
 export interface Player {
   id: string
@@ -16,7 +29,11 @@ export interface Player {
   bot?: boolean
 }
 
-export type Phase = 'playing' | 'roundOver' | 'gameOver'
+/**
+ * `lobby` waits for the host; `countdown` is the 3-2-1; a round is `playing`
+ * until someone reaches the edge.
+ */
+export type Phase = 'lobby' | 'countdown' | 'playing' | 'roundOver' | 'gameOver'
 
 export type Score = Record<Team, number>
 
@@ -29,25 +46,70 @@ export interface Track {
 
 export interface RoomSnapshot {
   id: string
+  public: boolean
+  hostId: string | null
   players: Player[]
+  settings: Settings
   count: number
   score: Score
   phase: Phase
   winner: Team | null
 }
 
+export interface PlayerResult {
+  id: string
+  name: string
+  team: Team
+  bot: boolean
+  presses: number
+  /** Most presses in any one second. */
+  peakPps: number
+}
+
+export interface Results {
+  winner: Team
+  score: Score
+  players: PlayerResult[]
+  /** Most presses on the winning side. */
+  mvp: string | null
+}
+
+export interface RoomListing {
+  id: string
+  players: number
+  phase: Phase
+  score: Score
+}
+
+export interface LeaderboardEntry {
+  name: string
+  games: number
+  wins: number
+  presses: number
+  peakPps: number
+}
+
 export type ServerMessage =
   | { t: 'welcome'; you: Player; room: RoomSnapshot }
-  | { t: 'players'; players: Player[] }
+  | { t: 'room'; room: RoomSnapshot }
   /** Sent at most once per tick, with the presses that produced the change. */
   | { t: 'state'; count: number; presses: Score }
-  | { t: 'phase'; phase: Phase; winner: Team | null; score: Score; count: number }
+  | { t: 'phase'; phase: Phase; winner: Team | null; score: Score; count: number; countdownMs?: number }
+  | { t: 'results'; results: Results }
   /** `elapsedMs` is how far into the track the room is, as of sending. */
   | { t: 'track'; track: Track; elapsedMs: number }
+  | { t: 'react'; id: string; emoji: Emoji }
+  | { t: 'frenzy'; active: boolean; ms: number }
+  | { t: 'error'; message: string }
 
 export type ClientMessage =
-  | { t: 'join'; name: string; room?: string }
+  /** `room` joins that code; `create` opens a new room; neither is quick play. */
+  | { t: 'join'; name: string; room?: string; create?: boolean }
   | { t: 'press' }
   | { t: 'skip' }
+  | { t: 'team'; team: Team }
+  | { t: 'start' }
+  | { t: 'settings'; settings: Partial<Settings> }
+  | { t: 'react'; emoji: Emoji }
 
 export const opponent = (team: Team): Team => (team === 'creators' ? 'destroyers' : 'creators')

@@ -3,30 +3,38 @@
   src:
     url('/fonts/Governor.woff2') format('woff2'),
     url('/fonts/Governor.woff') format('woff');
-  font-weight: normal;
-  font-style: normal;
   font-display: block;
 }
 
-/* Set every frame by the game loop. */
 :root {
-  /* Pixels of red/cyan split on the big type, set on #app by the game loop. */
-  --split: 0px;
+  --charcoal: #37474f;
+  --blue: #0091ea;
+  --dark: #1f282d;
+  --pink: #e91e63;
+  --glass: rgb(16 22 26 / 0.62);
+  --glass-line: rgb(255 255 255 / 0.1);
+  --radius: 18px;
+  --border: 20px;
+  --display: Governor, 'Product Sans', Arial, sans-serif;
+  --ui: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
 }
 
 * {
-  font-family: Governor, 'Product Sans', Arial, sans-serif;
-  font-weight: bold;
-  margin: 0;
   box-sizing: border-box;
+  margin: 0;
 }
 
 html,
-body {
+body,
+#app {
   height: 100%;
-  background: #1f282d;
+  background: var(--dark);
   overflow: hidden;
   overscroll-behavior: none;
+  font-family: var(--ui);
+  color: white;
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
@@ -36,9 +44,26 @@ body {
   touch-action: manipulation;
 }
 
+input {
+  user-select: text;
+}
+
+h1,
+h2,
+h3,
+.wordmark,
+.room-code,
+.btn,
+.countdown {
+  font-family: var(--display);
+  font-weight: bold;
+}
+
 #stage {
   position: fixed;
   inset: 0;
+  /* Set by the effects loop. */
+  --split: 0px;
 }
 
 #fx {
@@ -49,185 +74,742 @@ body {
   display: block;
 }
 
-#app {
-  position: relative;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+/* Marks the playing field for the shader: the original's frame, open at the bottom. */
+#frame {
+  position: absolute;
+  inset: var(--border) var(--border) 88px;
+  pointer-events: none;
 }
 
 [hidden] {
   display: none !important;
 }
 
-/* The shader paints the halves and the border; the frame only does layout. */
-.frame {
-  flex: 1;
+.muted {
+  opacity: 0.6;
+}
+
+/* --- Controls --------------------------------------------------------- */
+
+.panel {
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  padding: 20px;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.35);
+}
+
+.panel h2 {
+  font-size: 1rem;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--glass-line);
+  background: rgb(255 255 255 / 0.08);
+  color: white;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    transform 0.12s,
+    background 0.2s,
+    box-shadow 0.2s;
+}
+.btn:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.16);
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.btn.primary {
+  background: var(--pink);
+  border-color: transparent;
+  box-shadow: 0 8px 30px rgb(233 30 99 / 0.45);
+}
+.btn.primary:hover:not(:disabled) {
+  background: #ff2d77;
+  box-shadow: 0 10px 40px rgb(233 30 99 / 0.65);
+}
+.btn.ghost {
+  background: transparent;
+}
+.btn.small {
+  padding: 8px 14px;
+  font-size: 0.8rem;
+}
+.btn.big {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  border: 20px solid transparent;
-  border-bottom: 0;
-  min-height: 0;
+  align-items: center;
+  padding: 18px 24px;
+  font-size: 1.6rem;
+  letter-spacing: 6px;
+  border-radius: 16px;
+}
+.btn.big small {
+  font-family: var(--ui);
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 500;
+  opacity: 0.8;
 }
 
-.space-between {
+.segmented {
+  display: inline-flex;
+  background: rgb(0 0 0 / 0.3);
+  border-radius: 999px;
+  padding: 3px;
+}
+.segmented button {
+  border: 0;
+  background: none;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font: 600 0.8rem var(--ui);
+  text-transform: capitalize;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.segmented button.on {
+  background: white;
+  color: black;
+  opacity: 1;
+}
+.segmented button:disabled:not(.on) {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field span {
+  font-size: 0.75rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.field input,
+.code {
+  background: rgb(0 0 0 / 0.3);
+  border: 1px solid var(--glass-line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: white;
+  font: 600 1.4rem var(--ui);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.field input:focus,
+.code:focus {
+  border-color: var(--pink);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.room-code {
+  letter-spacing: 6px;
+}
+.room-code.big {
+  font-size: 2.4rem;
+}
+
+/* --- Home ------------------------------------------------------------- */
+
+.home {
+  position: absolute;
+  inset: var(--border);
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-areas:
+    'hero hero'
+    'play rooms'
+    'play stats'
+    'board board';
+  gap: 18px;
+  padding: 28px clamp(16px, 5vw, 64px) 48px;
+  align-content: start;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.hero {
+  grid-area: hero;
+  text-align: center;
+  padding: 2vh 0 1vh;
+}
+.wordmark {
+  font-size: clamp(4rem, 13vw, 9rem);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1;
+  text-shadow:
+    var(--split) 0 rgb(255 0 90 / 0.75),
+    calc(var(--split) * -1) 0 rgb(0 230 255 / 0.75),
+    0 10px 40px rgb(0 0 0 / 0.35);
+}
+.tagline {
+  margin-top: 8px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+.play {
+  grid-area: play;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.join {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+.code {
+  width: 7.5em;
+  font-size: 1rem;
+  padding: 10px 14px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  font-family: var(--display);
+}
+.rooms {
+  grid-area: rooms;
+}
+.rooms ul,
+.board ol,
+.team ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rooms li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rooms li .muted {
+  flex: 1;
+  font-size: 0.85rem;
+}
+.rooms .score {
+  font-variant-numeric: tabular-nums;
+}
+.stats {
+  grid-area: stats;
+}
+.stats dl {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.stats dt {
+  font-size: 0.7rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.stats dd {
+  font: 700 1.6rem var(--ui);
+  font-variant-numeric: tabular-nums;
+}
+.stats dd small {
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+.board {
+  grid-area: board;
+}
+.board-head {
   display: flex;
   justify-content: space-between;
-  padding: 20px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.board-head h2 {
+  margin: 0;
+}
+.board li {
+  display: flex;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.board li:nth-child(1) {
+  background: linear-gradient(90deg, rgb(233 30 99 / 0.35), transparent);
+}
+.board li.me {
+  outline: 1px solid var(--pink);
+}
+.board .rank {
+  width: 1.5em;
+  opacity: 0.6;
+}
+.board .name {
+  flex: 1;
+  font-weight: 600;
 }
 
-.center-text-align {
+/* --- Lobby ------------------------------------------------------------ */
+
+.room {
+  position: absolute;
+  inset: 0;
+}
+.lobby {
+  position: absolute;
+  inset: var(--border) var(--border) 88px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px clamp(16px, 5vw, 64px);
+  max-width: 980px;
+  margin: 0 auto;
+}
+.lobby-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.code-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.code-block .muted {
+  font-size: 0.75rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.team {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+}
+.team.destroyers {
+  background: rgb(55 71 79 / 0.75);
+}
+.team.creators {
+  background: rgb(0 145 234 / 0.55);
+}
+.team ul {
+  flex: 1;
+}
+.team li {
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.team li.me {
+  color: #ffd0e0;
+}
+.team li small {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.setting {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.start {
+  align-self: center;
+  min-width: 280px;
+}
+.waiting {
   text-align: center;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  opacity: 0.75;
+  animation: breathe 1.8s ease-in-out infinite;
 }
-.right-text-align {
+
+@keyframes breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* --- In game: the original layout -------------------------------------- */
+
+.hud {
+  position: absolute;
+  inset: var(--border) var(--border) 88px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  pointer-events: none;
+}
+.hud button,
+.hud .reactions {
+  pointer-events: auto;
+}
+.hud h1,
+.hud h2,
+.hud h3,
+.corner {
+  font-family: var(--display);
+  font-weight: bold;
+}
+.corner {
+  position: absolute;
+  top: 20px;
+  font-size: 1rem;
+  text-transform: uppercase;
+}
+.corner p {
+  margin: 3px 0;
+}
+.corner.tl {
+  left: 20px;
+}
+.corner.tr {
+  right: 20px;
   text-align: right;
+  max-width: 45%;
 }
-
-.white {
-  color: white;
-}
-
 .small-text {
   font-size: 0.8em;
   opacity: 0.65;
 }
-
-h1 {
+.music .track-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.icons {
+  margin-top: 6px;
+}
+.icon {
+  background: rgb(0 0 0 / 0.2);
+  border: 0;
+  border-radius: 999px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  font-size: 1rem;
+  margin-left: 6px;
+}
+.pps {
+  margin-top: 10px;
+  font: 600 0.8rem var(--ui);
+  text-transform: none;
+  background: rgb(0 0 0 / 0.25);
+  padding: 4px 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.pps strong {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+.middle {
+  text-align: center;
+}
+.call {
+  font-size: 4em;
+  line-height: 1;
+  letter-spacing: 12px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.percent {
   font-size: 5.5em;
   letter-spacing: 12px;
-  color: white;
+  font-variant-numeric: tabular-nums;
 }
-
-h2 {
-  font-size: 4em;
-  line-height: 44px;
-  letter-spacing: 12px;
-  color: white;
-}
-
-h3 {
-  font-size: 2em;
-  line-height: 22px;
-  letter-spacing: 6px;
-}
-
-h1,
-h2 {
+.call,
+.percent,
+.countdown {
   text-shadow:
     var(--split) 0 rgb(255 0 90 / 0.75),
     calc(var(--split) * -1) 0 rgb(0 230 255 / 0.75);
 }
-
-p {
-  margin: 3px 0;
-}
-.break {
-  height: 5px;
-}
-
-.music p {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 40vw;
-}
-
-.icon {
-  background: none;
-  border: 0;
-  padding: 0;
-  margin-left: 4px;
-  cursor: pointer;
-  color: inherit;
-  width: 29px;
-  height: 29px;
-}
-.icon svg {
-  width: 100%;
-  height: 100%;
-  fill: currentColor;
-}
-.icon:hover {
-  color: white;
-}
-#mute .off,
-#mute[aria-pressed='true'] .on {
-  display: none;
-}
-#mute[aria-pressed='true'] .off {
-  display: inline;
-}
-
-.player-name {
-  width: 100%;
-  background: none;
-  border: none;
-  font-size: 4em;
-  color: white;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-}
-.player-name:focus {
-  outline: 0;
-}
-.player-name::placeholder {
-  color: white;
-  opacity: 1;
-}
-
-/* Reserves the band the shader draws: 10px of white around a 40px fill. */
-.bar {
+/* Drawn by the shader; this only reserves the space and marks where. */
+#bar {
   height: 60px;
 }
-
-#call {
+.scores {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.scores h3 {
+  font-size: 2em;
+  letter-spacing: 6px;
   text-transform: uppercase;
 }
-
-.players {
-  padding: 0;
-  flex-shrink: 0;
+.scores h3:last-child {
+  color: black;
 }
-.players .destroyers,
-.players .creators {
-  color: white;
-  font-size: 1.5em;
+.target {
+  font: 600 0.75rem var(--ui);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.countdown {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: min(40vw, 40vh);
+  line-height: 1;
+  pointer-events: none;
+}
+.frenzy {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 26px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff006a, #ffb300, #00e0ff, #b400ff);
+  background-size: 300% 100%;
+  animation: rainbow 0.8s linear infinite;
+  color: black;
+  box-shadow: 0 10px 40px rgb(255 0 106 / 0.5);
+}
+.frenzy strong {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+}
+.frenzy span {
+  font: 700 0.8rem var(--ui);
+}
+
+@keyframes rainbow {
+  to {
+    background-position: 300% 0;
+  }
+}
+
+.reactions {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 999px;
+}
+.reactions button {
+  border: 0;
+  background: none;
+  font-size: 1.4rem;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.reactions button:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+.reactions button:active {
+  transform: scale(1.3);
+}
+
+.floaters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.floater {
+  position: absolute;
+  bottom: 120px;
+  font-size: 2.6rem;
+  animation: float-up 2.6s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes float-up {
+  0% {
+    transform: translateY(0) scale(0.3);
+    opacity: 0;
+  }
+  12% {
+    transform: translateY(-40px) scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-55vh) scale(1) rotate(12deg);
+    opacity: 0;
+  }
+}
+
+/* Rosters and the title tab along the bottom. */
+.players {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 88px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  font-family: var(--display);
+}
+.roster {
   flex: 1;
   min-width: 0;
+  align-self: flex-start;
+  padding: 14px 40px 0;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
 }
-.players .destroyers {
-  padding: 20px 0 0 40px;
+.roster.creators {
+  justify-content: flex-end;
 }
-.players .creators {
-  padding: 20px 40px 0 0;
-  text-align: right;
-}
-.players p {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.players .me {
+.roster .me {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
-.players .bot {
+.roster .bot {
   opacity: 0.55;
 }
-
 .title {
-  background-color: white;
-  padding: 20px 35px 15px 40px;
+  background: white;
+  padding: 16px 32px 10px;
   flex-shrink: 0;
 }
 .title h1 {
-  font-size: 5em;
+  font-size: 3.6rem;
   color: black;
-  text-shadow: none;
+  letter-spacing: 10px;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
-/* The flash player sets the text colour against the strobe. */
+/* --- Results ---------------------------------------------------------- */
+
+.results-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.35);
+  padding: 20px;
+}
+.results {
+  width: min(560px, 100%);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.results h1 {
+  font-size: clamp(2.4rem, 8vw, 4rem);
+  letter-spacing: 8px;
+  text-transform: uppercase;
+}
+.results h1.creators {
+  color: #4fc3ff;
+}
+.results h1.destroyers {
+  color: #b0bec5;
+}
+.verdict {
+  font-weight: 600;
+}
+.results table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0;
+}
+.results th {
+  font-size: 0.7rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  opacity: 0.6;
+  padding: 6px;
+}
+.results th:first-child,
+.results td:first-child {
+  text-align: left;
+}
+.results td {
+  padding: 8px 6px;
+  border-top: 1px solid var(--glass-line);
+}
+.results tr.creators td:first-child {
+  box-shadow: inset 3px 0 var(--blue);
+  padding-left: 10px;
+}
+.results tr.destroyers td:first-child {
+  box-shadow: inset 3px 0 #90a4ae;
+  padding-left: 10px;
+}
+.results tr.me {
+  background: rgb(233 30 99 / 0.15);
+}
+.results td small {
+  color: var(--pink);
+  font-weight: 700;
+}
+.results .row {
+  justify-content: center;
+}
+
+/* --- Flash and toasts ----------------------------------------------------- */
+
 #flash {
   position: absolute;
   inset: 0;
@@ -237,17 +819,17 @@ p {
   justify-content: center;
   pointer-events: none;
   color: black;
+  font-family: var(--display);
+  font-weight: bold;
 }
-/* Laid out once at full size; the flash player scales it with transforms,
-   which the compositor handles without re-laying out 240px type. */
+/* Laid out once at full size; the flash player scales it with transforms. */
 #flash-text {
   font-size: calc(15em * var(--flash-scale, 1));
-  will-change: transform;
   text-transform: uppercase;
   text-align: center;
   line-height: 1;
   white-space: nowrap;
-  text-shadow: none;
+  will-change: transform;
 }
 #flash-prompt {
   font-size: 1.5em;
@@ -255,7 +837,6 @@ p {
   text-transform: uppercase;
   animation: blink 1.1s steps(2, start) infinite;
 }
-
 #flash-warning {
   position: absolute;
   bottom: 40px;
@@ -269,73 +850,138 @@ p {
   text-transform: uppercase;
   opacity: 0.7;
 }
-
 @keyframes blink {
   to {
     visibility: hidden;
   }
 }
-
-/* While the flash runs, the game sits under the strobe. */
-#app[data-screen='intro'] .frame > *,
-#app[data-screen='intro'] .players,
-#app[data-flashing] .frame > *,
-#app[data-flashing] .players {
+body[data-flashing] .room > :not(.floaters) {
   visibility: hidden;
 }
 
-@media (max-width: 900px), (max-height: 560px) {
+.toast {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  translate: -50% 0;
+  background: var(--pink);
+  padding: 12px 20px;
+  border-radius: 999px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.4);
+  cursor: pointer;
+}
+
+/* --- Transitions ------------------------------------------------------ */
+
+.fade-enter-active,
+.fade-leave-active {
+  transition:
+    opacity 0.3s,
+    transform 0.3s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 0.25s,
+    translate 0.25s;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  translate: -50% -20px;
+}
+.pop-enter-active {
+  transition:
+    transform 0.35s cubic-bezier(0.2, 1.6, 0.4, 1),
+    opacity 0.2s;
+}
+.pop-leave-active {
+  transition:
+    transform 0.25s,
+    opacity 0.25s;
+  position: absolute;
+}
+.pop-enter-from {
+  transform: scale(2.2);
+  opacity: 0;
+}
+.pop-leave-to {
+  transform: scale(0.6);
+  opacity: 0;
+}
+
+/* --- Small screens ----------------------------------------------------- */
+
+@media (max-width: 760px) {
+  :root {
+    --border: 10px;
+  }
   body {
     font-size: 11px;
   }
-  h1 {
-    letter-spacing: 6px;
+  .home {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'hero' 'play' 'rooms' 'stats' 'board';
+    padding: 16px 14px 40px;
   }
-  h2 {
+  .stats dl {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .teams {
+    grid-template-columns: 1fr;
+  }
+  .team {
+    min-height: 0;
+  }
+  .call {
     font-size: 3.4em;
-    line-height: 1;
     letter-spacing: 6px;
   }
-  h3 {
+  .percent {
+    letter-spacing: 6px;
+  }
+  .scores h3 {
     letter-spacing: 3px;
   }
-  .frame {
-    border-width: 10px;
-  }
-  .space-between {
-    padding: 12px;
-  }
-  .players .destroyers {
-    padding: 14px 0 0 16px;
-  }
-  .players .creators {
-    padding: 14px 16px 0 0;
+  .roster {
+    padding: 12px 14px 0;
   }
   .title {
-    padding: 12px 18px 8px 22px;
+    padding: 12px 18px 8px;
   }
   .title h1 {
-    font-size: 3.4em;
-  }
-  .player-name {
-    font-size: 3.2em;
+    font-size: 2.6rem;
+    letter-spacing: 6px;
   }
   #flash-text {
     white-space: normal;
   }
-  .bar {
-    height: 50px;
+  .scores h3 {
+    font-size: 1.5em;
+  }
+  .target {
+    display: none;
+  }
+  .reactions {
+    bottom: 64px;
+  }
+  .reactions button {
+    width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
   }
 }
 
 /* Without WebGPU or WebGL2, fall back to the original flat look. */
-.no-fx body {
-  background: #1f282d;
+.no-fx #frame {
+  background: linear-gradient(to right, var(--charcoal) 50%, var(--blue) 50%);
 }
-.no-fx .frame {
-  border-color: #1f282d;
-  background: linear-gradient(to right, #37474f 50%, #0091ea 50%);
-}
-.no-fx .bar {
-  background: #fff;
+.no-fx #bar {
+  background: white;
 }

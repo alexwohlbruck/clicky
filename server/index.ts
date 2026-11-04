@@ -1,37 +1,56 @@
+import { mkdir } from 'node:fs/promises'
 import { join, normalize } from 'node:path'
-import { ROOM_CAPACITY, type ClientMessage, type Track } from '../shared/protocol'
+import { ROOM_CAPACITY, type ClientMessage, type RoomListing, type ServerMessage, type Track } from '../shared/protocol'
 import tracks from '../shared/tracks.json'
+import { Leaderboard } from './leaderboard'
 import { Room } from './room'
 
 const PORT = Number(process.env.PORT ?? (process.env.NODE_ENV === 'production' ? 3700 : 3701))
 const JUKEBOX_URL = process.env.JUKEBOX_URL ?? 'https://jukebox.wohlbruck.dev'
-const DIST = join(import.meta.dir, '..', 'dist')
+const ROOT = join(import.meta.dir, '..')
+const DIST = join(ROOT, 'dist')
+const DATA = process.env.DATA_DIR ?? join(ROOT, 'data')
 const TICK_MS = 1000 / 30
 
 const playlist = tracks as Track[]
 const knownTracks = new Set(playlist.map((track) => track.id))
 const rooms = new Map<string, Room>()
 
+await mkdir(DATA, { recursive: true })
+const leaderboard = await Leaderboard.open(join(DATA, 'leaderboard.json'))
+
 interface SocketData {
   id: string
   roomId?: string
 }
 
-/** Public games fill the newest room with space; a named room is private. */
-function findRoom(requested: string | undefined, now: number): Room {
-  const named = requested?.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24)
-  if (named) {
-    const room = rooms.get(named) ?? new Room({ id: named, tracks: playlist, now })
-    rooms.set(named, room)
-    return room
-  }
+/** Four letters, skipping ones that read alike. */
+function roomCode() {
+  const letters = 'ABCDEFGHJKMNPQRSTUVWXYZ'
+  let code = ''
+  do code = Array.from({ length: 4 }, () => letters[Math.floor(Math.random() * letters.length)]).join('')
+  while (rooms.has(code))
+  return code
+}
 
-  const open = [...rooms.values()].reverse().find((room) => room.id.startsWith('~') && room.humanCount < ROOM_CAPACITY)
-  if (open) return open
-
-  const room = new Room({ id: `~${crypto.randomUUID().slice(0, 8)}`, tracks: playlist, now })
+function openRoom(isPublic: boolean, now: number) {
+  const room = new Room({ id: roomCode(), public: isPublic, tracks: playlist, now, onResults: (results) => leaderboard.record(results) })
   rooms.set(room.id, room)
   return room
+}
+
+/** Quick play joins the fullest public room with space, or opens one. */
+function quickPlay(now: number) {
+  const open = [...rooms.values()]
+    .filter((room) => room.public && room.humanCount < ROOM_CAPACITY)
+    .sort((a, b) => b.humanCount - a.humanCount)[0]
+  return open ?? openRoom(true, now)
+}
+
+function listings(): RoomListing[] {
+  return [...rooms.values()]
+    .filter((room) => room.public && room.humanCount > 0)
+    .map((room) => ({ id: room.id, players: room.humanCount, phase: room.phase, score: room.score }))
 }
 
 /**
@@ -78,6 +97,8 @@ const server = Bun.serve<SocketData>({
       return upgraded ? undefined : new Response('Expected a WebSocket', { status: 426 })
     }
     if (url.pathname.startsWith('/music/')) return proxyMusic(url)
+    if (url.pathname === '/api/rooms') return Response.json(listings())
+    if (url.pathname === '/api/leaderboard') return Response.json(leaderboard.top())
     if (url.pathname === '/health') return Response.json({ ok: true, rooms: rooms.size })
 
     return serveStatic(url)
@@ -93,21 +114,47 @@ const server = Bun.serve<SocketData>({
       }
 
       const now = Date.now()
+      const id = socket.data.id
       const room = socket.data.roomId ? rooms.get(socket.data.roomId) : undefined
+      const send = (out: ServerMessage) => socket.send(JSON.stringify(out))
 
       switch (message.t) {
         case 'join': {
           if (room) return
-          const joined = findRoom(message.room, now)
+          let joined: Room | undefined
+          if (message.create) joined = openRoom(false, now)
+          else if (message.room) joined = rooms.get(String(message.room).toUpperCase())
+          else joined = quickPlay(now)
+
+          if (!joined) {
+            send({ t: 'error', message: `No room called ${String(message.room).toUpperCase()}` })
+            return
+          }
+          if (joined.humanCount >= ROOM_CAPACITY) {
+            send({ t: 'error', message: 'That room is full' })
+            return
+          }
           socket.data.roomId = joined.id
-          joined.join(socket.data.id, String(message.name ?? ''), (out) => socket.send(JSON.stringify(out)), now)
+          joined.join(id, String(message.name ?? ''), send, now)
           break
         }
         case 'press':
-          room?.press(socket.data.id, now)
+          room?.press(id, now)
           break
         case 'skip':
           room?.skipTrack(now)
+          break
+        case 'team':
+          room?.switchTeam(id, message.team, now)
+          break
+        case 'start':
+          room?.start(id, now)
+          break
+        case 'settings':
+          room?.updateSettings(id, message.settings ?? {}, now)
+          break
+        case 'react':
+          room?.react(id, message.emoji, now)
           break
       }
     },
