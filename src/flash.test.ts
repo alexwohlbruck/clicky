@@ -44,3 +44,15 @@ test('a strobe faster than the frame rate flips at most once a frame', () => {
   const frames = new Set(toggles.map(({ ms }) => ms))
   expect(frames.size).toBe(toggles.length)
 })
+
+test('the letters type out with no effects, and the intensity only climbs from there', async () => {
+  const { introIntensity } = await import('./flash')
+  const letters = play().filter(({ event }) => event.type === 'letter')
+  for (const { ms } of letters) expect(introIntensity(ms)).toBe(0)
+  let previous = 0
+  for (let ms = 0; ms < 9667; ms += 50) {
+    expect(introIntensity(ms)).toBeGreaterThanOrEqual(previous)
+    previous = introIntensity(ms)
+  }
+  expect(introIntensity(8000)).toBe(1)
+})

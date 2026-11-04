@@ -51,6 +51,8 @@ export function backgroundUniforms() {
     flash: uniform(0),
     /** Low-frequency energy of the music, 0 to 1. */
     beat: uniform(0),
+    /** Film grain, 0 to 1. Off while the intro is still plain black and white. */
+    grain: uniform(1),
   }
 }
 
@@ -143,7 +145,7 @@ export function backgroundNode(u: BackgroundUniforms) {
 
     // Film grain.
     const grain = hash(floor(origin.x).add(floor(origin.y).mul(4099)).add(frameTick.mul(65537))).sub(0.5)
-    framed.addAssign(grain.mul(smoothstep(0, 1, u.chaos).mul(0.06).add(0.025)))
+    framed.addAssign(grain.mul(smoothstep(0, 1, u.chaos).mul(0.06).add(0.025)).mul(u.grain))
 
     return vec4(framed, 1)
   })()

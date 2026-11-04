@@ -68,6 +68,34 @@ export const INTRO: Frames = {
   9667: { endFlash: true },
 }
 
+/**
+ * How hard the effects layer hits during the intro, 0 to 1. The letters type
+ * out in plain black and white like the original; the size pumps bring in a
+ * little shake, the warps start to glitch, and the strobes go all the way.
+ */
+const INTRO_INTENSITY: [ms: number, intensity: number][] = [
+  [0, 0],
+  [note(7), 0],
+  [note(8), 0.12],
+  [note(17), 0.3],
+  [note(19), 0.4],
+  [note(28), 0.6],
+  [note(30), 0.7],
+  [note(45), 0.85],
+  [note(46), 1],
+]
+
+export function introIntensity(ms: number) {
+  for (let i = 1; i < INTRO_INTENSITY.length; i++) {
+    const [t1, v1] = INTRO_INTENSITY[i]!
+    if (ms < t1) {
+      const [t0, v0] = INTRO_INTENSITY[i - 1]!
+      return v0 + ((v1 - v0) * Math.max(0, ms - t0)) / (t1 - t0)
+    }
+  }
+  return 1
+}
+
 export const ROUND_OVER: Frames = {
   0: { flashAnimation: 80, textStyle: { visibility: 'visible', fontSize: 10 } },
   300: { appendLetter: { interval: 160 } },

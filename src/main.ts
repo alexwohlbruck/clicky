@@ -1,7 +1,7 @@
 import './style.css'
 import { MAX, START, type Player, type RoomSnapshot, type ServerMessage, type Team } from '../shared/protocol'
 import { Sound } from './audio'
-import { Flash, GAME_OVER, INTRO, ROUND_OVER, type FlashEvent, type Frames } from './flash'
+import { Flash, GAME_OVER, INTRO, ROUND_OVER, introIntensity, type FlashEvent, type Frames } from './flash'
 import { Kind } from './fx/particles'
 import { Stage } from './fx/stage'
 
@@ -61,6 +61,8 @@ let shockStrength = 0
 let shockOrigin = { x: 0, y: 0 }
 
 let flash: { player: Flash; clock: () => number } | null = null
+/** Scales every effect; it climbs through the intro and sits at 1 afterwards. */
+let intensity = 1
 let introStarted = false
 let introStartedAt = 0
 
@@ -130,36 +132,39 @@ function celebrate(winner: Team, big: boolean) {
 
 /** The intro's extra layer: everything the keyframes do also hits the shader. */
 function onIntroEvent(event: FlashEvent) {
+  const k = event.type === 'end' ? 1 : intensity
+  // The opening is plain black and white, as in the original.
+  if (k < 0.01) return
   const center = { x: innerWidth / 2, y: innerHeight / 2 }
   const text = el.flashText.getBoundingClientRect()
 
   switch (event.type) {
     case 'letter':
-      // Each letter lands with a shock and throws shards off its right edge.
-      shock(text.right, center.y, 0.8)
-      trauma = Math.min(1, trauma + 0.45)
-      spike = Math.max(spike, 0.6)
-      stage?.particles.emit({ x: text.right - 20, y: center.y, count: 260, kind: Kind.Shard, speed: 1300, height: text.height * 0.6, life: 1.4, size: 14 })
+      // A letter lands with a shock and throws shards off its right edge.
+      shock(text.right, center.y, 0.8 * k)
+      trauma = Math.min(1, trauma + 0.45 * k)
+      spike = Math.max(spike, 0.6 * k)
+      stage?.particles.emit({ x: text.right - 20, y: center.y, count: 260 * k, kind: Kind.Shard, speed: 1300, height: text.height * 0.6, life: 1.4, size: 14 })
       break
     case 'size':
-      shock(center.x, center.y, 0.6)
-      trauma = Math.min(1, trauma + 0.35)
-      spike = Math.max(spike, 0.5)
+      shock(center.x, center.y, 0.6 * k)
+      trauma = Math.min(1, trauma + 0.35 * k)
+      spike = Math.max(spike, 0.5 * k)
       break
     case 'warp':
-      spike = 1
-      trauma = Math.min(1, trauma + 0.25)
-      stage?.particles.emit({ x: center.x, y: center.y, count: 120, kind: Kind.Shard, speed: 1700, width: text.width, height: 10, life: 0.8, size: 9 })
+      spike = Math.max(spike, k)
+      trauma = Math.min(1, trauma + 0.25 * k)
+      stage?.particles.emit({ x: center.x, y: center.y, count: 120 * k, kind: Kind.Shard, speed: 1700, width: text.width, height: 10, life: 0.8, size: 9 })
       break
     case 'toggle': {
       // The slow strobe pops a ring of shards; the fast one is pure noise.
       const frantic = event.period < 100
-      spike = Math.max(spike, frantic ? 1 : 0.55)
+      spike = Math.max(spike, (frantic ? 1 : 0.55) * k)
       if (frantic) {
-        stage?.particles.emit({ x: Math.random() * innerWidth, y: Math.random() * innerHeight, count: 40, kind: Kind.Shard, speed: 1100, life: 0.6, size: 10 })
+        stage?.particles.emit({ x: Math.random() * innerWidth, y: Math.random() * innerHeight, count: 40 * k, kind: Kind.Shard, speed: 1100, life: 0.6, size: 10 })
       } else {
-        shock(center.x, center.y, 0.5)
-        stage?.particles.emit({ x: center.x, y: center.y, count: 180, kind: Kind.Shard, speed: 1500, life: 1.2, size: 12 })
+        shock(center.x, center.y, 0.5 * k)
+        stage?.particles.emit({ x: center.x, y: center.y, count: 180 * k, kind: Kind.Shard, speed: 1500, life: 1.2, size: 12 })
       }
       break
     }
@@ -373,6 +378,8 @@ function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000)
   last = now
 
+  if (screen === 'intro') intensity = flash ? introIntensity(flash.clock()) : 0
+  else intensity = 1
   if (flash) flash.player.update(flash.clock())
 
   // Where the bar should be.
@@ -425,7 +432,8 @@ function frame(now: number) {
     const covering = screen === 'intro' || !!flash
     u.flash.value = covering ? 1 : 0
     u.strobe.value = flash?.player.dark ? 1 : 0
-    stage.fringe.value = 0.0005 + chaos * 0.005 + trauma * 0.006
+    stage.fringe.value = (0.0005 + chaos * 0.005 + trauma * 0.006) * intensity
+    u.grain.value = intensity
 
     // A slow drizzle of sparks off the bar on the name screen.
     if (screen === 'name' && Math.random() < dt * 6) {
