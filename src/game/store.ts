@@ -1,5 +1,6 @@
 import { reactive, toRaw } from 'vue'
 import type {
+  ChatMessage,
   ClientMessage,
   Emoji,
   Player,
@@ -57,6 +58,9 @@ export const state = reactive({
   myRecent: [] as number[],
   /** Presses sent but not yet reflected in a server state. */
   unconfirmed: 0,
+  /** Presses this game, by player id, from the server. */
+  tally: {} as Record<string, number>,
+  chat: [] as ChatMessage[],
 })
 
 /** The effects layer listens here; the store doesn't know about shaders. */
@@ -140,6 +144,8 @@ export const actions = {
   settings: (settings: Partial<Settings>) => send({ t: 'settings', settings }),
   react: (emoji: Emoji) => send({ t: 'react', emoji }),
   skip: () => send({ t: 'skip' }),
+  say: (text: string) => send({ t: 'chat', text }),
+  kick: (id: string) => send({ t: 'kick', id }),
 }
 
 function float(emoji: Emoji, team: Team) {
@@ -158,6 +164,8 @@ function receive(message: ServerMessage) {
       state.unconfirmed = 0
       state.results = null
       state.showResults = false
+      state.chat = []
+      state.tally = {}
       state.screen = 'room'
       pendingJoin = null
       history.replaceState(null, '', `?room=${message.room.id}`)
@@ -172,6 +180,7 @@ function receive(message: ServerMessage) {
       const { room, me } = state
       if (!room || !me) return
       room.count = message.count
+      state.tally = message.tally
       // Our own presses already burst when we pressed; only show the rest.
       for (const team of ['creators', 'destroyers'] as const) {
         let others = message.presses[team]
@@ -194,6 +203,7 @@ function receive(message: ServerMessage) {
       if (message.phase === 'countdown') {
         state.countdownEndsAt = performance.now() + (message.countdownMs ?? 3000)
         state.myPresses = 0
+        state.tally = {}
         state.showResults = false
         hooks.countdown()
       }
@@ -236,6 +246,15 @@ function receive(message: ServerMessage) {
     case 'frenzy':
       state.frenzyUntil = message.active ? performance.now() + message.ms : 0
       hooks.frenzy(message.active)
+      break
+
+    case 'chat':
+      state.chat = [...state.chat.slice(-49), message.message]
+      break
+
+    case 'kicked':
+      actions.leave()
+      state.error = 'The host removed you from the room'
       break
 
     case 'error':

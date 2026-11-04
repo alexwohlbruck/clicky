@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { EMOJI, type BotLevel, type Team } from '../../shared/protocol'
 import { display, sound } from '../game/effects'
 import { actions, state } from '../game/store'
@@ -50,6 +50,18 @@ async function copyInvite() {
   } catch {}
 }
 
+const draft = ref('')
+const chatList = ref<HTMLElement>()
+function say() {
+  if (!draft.value.trim()) return
+  actions.say(draft.value)
+  draft.value = ''
+}
+watch(
+  () => state.chat.length,
+  () => nextTick(() => chatList.value?.scrollTo({ top: chatList.value.scrollHeight, behavior: 'smooth' })),
+)
+
 const bots: BotLevel[] = ['off', 'easy', 'normal', 'hard']
 const results = computed(() => state.results)
 /** Badges for the results table, beyond the MVP. */
@@ -88,6 +100,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
               <span>{{ p.bot ? '🤖' : p.id === room.hostId ? '👑' : '•' }}</span>
               {{ p.name }}
               <small v-if="p.id === me.id">you</small>
+              <button v-if="isHost && !p.bot && p.id !== me.id" class="kick" :aria-label="`Remove ${p.name}`" @click="actions.kick(p.id)">✕</button>
             </li>
           </ul>
           <button v-if="me.team !== t.team" class="btn small" @click="actions.switchTeam(t.team)">Switch to {{ t.label.toLowerCase() }}</button>
@@ -116,6 +129,20 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
             <button :class="{ on: !room.settings.frenzy }" :disabled="!isHost" @click="actions.settings({ frenzy: false })">off</button>
           </div>
         </div>
+      </div>
+
+      <div class="panel chat">
+        <h2>Chat</h2>
+        <ul ref="chatList">
+          <li v-if="!state.chat.length" class="muted">Talk some trash before the game.</li>
+          <li v-for="m in state.chat" :key="m.at + m.id">
+            <strong :class="m.team">{{ m.name }}</strong> {{ m.text }}
+          </li>
+        </ul>
+        <form @submit.prevent="say">
+          <input v-model="draft" maxlength="140" placeholder="Say something…" enterkeyhint="send" />
+          <button class="btn small" :disabled="!draft.trim()">Send</button>
+        </form>
       </div>
 
       <button v-if="isHost" class="btn primary big start" @click="actions.start()">Start game</button>
@@ -175,11 +202,15 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
     <!-- Rosters along the bottom, as in the original -------------------------- -->
     <footer class="players">
       <div class="roster destroyers">
-        <p v-for="p in teamPlayers('destroyers')" :key="p.id" :class="{ me: p.id === me.id, bot: p.bot }">{{ p.name }}</p>
+        <p v-for="p in teamPlayers('destroyers')" :key="p.id" :class="{ me: p.id === me.id, bot: p.bot }">
+          {{ p.name }}<span v-if="!inLobby" class="tally">{{ state.tally[p.id] ?? 0 }}</span>
+        </p>
       </div>
       <div class="title"><h1>Clicky</h1></div>
       <div class="roster creators">
-        <p v-for="p in teamPlayers('creators')" :key="p.id" :class="{ me: p.id === me.id, bot: p.bot }">{{ p.name }}</p>
+        <p v-for="p in teamPlayers('creators')" :key="p.id" :class="{ me: p.id === me.id, bot: p.bot }">
+          {{ p.name }}<span v-if="!inLobby" class="tally">{{ state.tally[p.id] ?? 0 }}</span>
+        </p>
       </div>
     </footer>
 

@@ -6,6 +6,7 @@ import {
   TEAMS,
   opponent,
   type BotLevel,
+  type ChatMessage,
   type Emoji,
   type Phase,
   type Player,
@@ -38,6 +39,7 @@ interface Seat {
   presses: number
   peakPps: number
   lastReactAt: number
+  lastChatAt: number
 }
 
 export interface RoomOptions {
@@ -70,6 +72,7 @@ export class Room {
   winner: Team | null = null
   private phaseEndsAt = 0
   private pending: Score = { creators: 0, destroyers: 0 }
+  private chat: ChatMessage[] = []
   private frenzyAt = Infinity
   private frenzyUntil = 0
 
@@ -118,12 +121,13 @@ export class Room {
 
   join(id: string, name: string, send: (message: ServerMessage) => void, now: number): Player {
     const player: Player = { id, name: name.trim().slice(0, 16) || 'Anonymous', team: this.smallerTeam() }
-    this.seats.set(id, { player, send, recent: [], presses: 0, peakPps: 0, lastReactAt: 0 })
+    this.seats.set(id, { player, send, recent: [], presses: 0, peakPps: 0, lastReactAt: 0, lastChatAt: 0 })
     this.hostId ??= id
     this.seatBot(now)
 
     send({ t: 'welcome', you: player, room: this.snapshot() })
     send({ t: 'track', track: this.track, elapsedMs: now - this.trackStartedAt })
+    for (const message of this.chat) send({ t: 'chat', message })
     this.broadcastRoom(id)
     return player
   }
@@ -188,6 +192,24 @@ export class Room {
     this.broadcast({ t: 'react', id, emoji })
   }
 
+  say(id: string, text: string, now: number) {
+    const seat = this.seats.get(id)
+    const clean = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 140)
+    if (!seat || !clean || now - seat.lastChatAt < 500) return
+    seat.lastChatAt = now
+    const message = { id, name: seat.player.name, team: seat.player.team, text: clean, at: now }
+    this.chat = [...this.chat.slice(-19), message]
+    this.broadcast({ t: 'chat', message })
+  }
+
+  /** The host can remove anyone but themselves. */
+  kick(id: string, target: string, now: number) {
+    const seat = this.seats.get(target)
+    if (id !== this.hostId || target === id || !seat) return
+    seat.send({ t: 'kicked' })
+    this.leave(target, now)
+  }
+
   skipTrack(now: number) {
     this.changeTrack(now)
   }
@@ -218,7 +240,7 @@ export class Room {
     if (now - this.trackStartedAt >= this.track.durationMs) this.changeTrack(now)
 
     if (this.pending.creators || this.pending.destroyers) {
-      this.broadcast({ t: 'state', count: this.count, presses: this.pending })
+      this.broadcast({ t: 'state', count: this.count, presses: this.pending, tally: this.tally() })
       this.pending = { creators: 0, destroyers: 0 }
     }
   }
@@ -239,7 +261,7 @@ export class Room {
   private endRound(winner: Team, now: number) {
     this.count = Math.min(MAX - 1, Math.max(1, this.count))
     // Let clients see the bar reach the edge before the flash covers it.
-    this.broadcast({ t: 'state', count: this.count, presses: this.pending })
+    this.broadcast({ t: 'state', count: this.count, presses: this.pending, tally: this.tally() })
     this.pending = { creators: 0, destroyers: 0 }
     this.endFrenzy()
 
@@ -253,6 +275,14 @@ export class Room {
     } else {
       this.setPhase('roundOver', now + ROUND_OVER_MS, now)
     }
+  }
+
+  /** Presses this game, by player. */
+  private tally() {
+    const tally: Record<string, number> = {}
+    for (const [id, seat] of this.seats) tally[id] = seat.presses
+    if (this.bot) tally[BOT_ID] = this.botPresses
+    return tally
   }
 
   private results(winner: Team): Results {

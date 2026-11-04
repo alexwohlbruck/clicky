@@ -87,7 +87,7 @@ describe('Room', () => {
     room.press('p2', now + 30)
     room.tick(now + 40)
     expect(room.count).toBe(START + 1)
-    expect(inbox.get('p1')!.at(-1)).toEqual({ t: 'state', count: START + 1, presses: { creators: 2, destroyers: 1 } })
+    expect(inbox.get('p1')!.at(-1)).toEqual({ t: 'state', count: START + 1, presses: { creators: 2, destroyers: 1 }, tally: { p1: 2, p2: 1 } })
   })
 
   test('ignores presses beyond the rate limit', () => {
@@ -155,5 +155,27 @@ describe('Room', () => {
     room.react('p1', '🔥', 1100)
     room.react('p1', '💀', 1500)
     expect(inbox.get('p1')!.filter((m) => m.t === 'react')).toHaveLength(2)
+  })
+  test('chat is trimmed, rate limited, and replayed to late joiners', () => {
+    const { room, inbox, join } = setup()
+    join('p1')
+    room.say('p1', '  gg   ez  ', 1000)
+    room.say('p1', 'spam', 1100)
+    join('p2', 2000)
+    const seen = inbox.get('p2')!.filter((m) => m.t === 'chat')
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatchObject({ message: { text: 'gg ez', name: 'p1' } })
+  })
+
+  test('only the host can kick, and not themselves', () => {
+    const { room, inbox, join } = setup()
+    join('p1')
+    join('p2')
+    room.kick('p2', 'p1', 0)
+    room.kick('p1', 'p1', 0)
+    expect(room.humanCount).toBe(2)
+    room.kick('p1', 'p2', 0)
+    expect(room.humanCount).toBe(1)
+    expect(inbox.get('p2')!.at(-1)).toEqual({ t: 'kicked' })
   })
 })

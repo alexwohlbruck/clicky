@@ -156,6 +156,12 @@ const server = Bun.serve<SocketData>({
         case 'react':
           room?.react(id, message.emoji, now)
           break
+        case 'chat':
+          room?.say(id, message.text, now)
+          break
+        case 'kick':
+          room?.kick(id, message.id, now)
+          break
       }
     },
 

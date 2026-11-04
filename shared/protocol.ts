@@ -74,6 +74,14 @@ export interface Results {
   mvp: string | null
 }
 
+export interface ChatMessage {
+  id: string
+  name: string
+  team: Team
+  text: string
+  at: number
+}
+
 export interface RoomListing {
   id: string
   players: number
@@ -93,13 +101,16 @@ export type ServerMessage =
   | { t: 'welcome'; you: Player; room: RoomSnapshot }
   | { t: 'room'; room: RoomSnapshot }
   /** Sent at most once per tick, with the presses that produced the change. */
-  | { t: 'state'; count: number; presses: Score }
+  | { t: 'state'; count: number; presses: Score; tally: Record<string, number> }
   | { t: 'phase'; phase: Phase; winner: Team | null; score: Score; count: number; countdownMs?: number }
   | { t: 'results'; results: Results }
   /** `elapsedMs` is how far into the track the room is, as of sending. */
   | { t: 'track'; track: Track; elapsedMs: number }
   | { t: 'react'; id: string; emoji: Emoji }
   | { t: 'frenzy'; active: boolean; ms: number }
+  | { t: 'chat'; message: ChatMessage }
+  /** The host removed you from the room. */
+  | { t: 'kicked' }
   | { t: 'error'; message: string }
 
 export type ClientMessage =
@@ -111,5 +122,7 @@ export type ClientMessage =
   | { t: 'start' }
   | { t: 'settings'; settings: Partial<Settings> }
   | { t: 'react'; emoji: Emoji }
+  | { t: 'chat'; text: string }
+  | { t: 'kick'; id: string }
 
 export const opponent = (team: Team): Team => (team === 'creators' ? 'destroyers' : 'creators')
