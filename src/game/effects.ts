@@ -1,6 +1,6 @@
 import { MAX, START, type Team } from '../../shared/protocol'
 import { Sound } from '../audio'
-import { Flash, GAME_OVER, INTRO, ROUND_OVER, introIntensity, type FlashEvent, type Frames } from '../flash'
+import { Flash, GAME_OVER, INTRO, ROUND_OVER, cues, introIntensity, type FlashEvent, type Frames } from '../flash'
 import { Kind } from '../fx/particles'
 import { Stage } from '../fx/stage'
 import { haptics } from '../haptics'
@@ -154,12 +154,15 @@ hooks.roundOver = (winner, gameOver) => {
     emit({ x: frameRect.x + (frameRect.w * (i + 0.5)) / columns, y: -20, count: gameOver ? 260 : 160, kind, speed: 500, angle: Math.PI / 2, spread: 1.2, width: frameRect.w / columns, life: 3.2, size: 13 })
   }
   emit({ x, y, count: 500, kind: Kind.Spark, speed: 1600, life: 1.1, size: 12 })
-  sound.roundOver(winner === state.me?.team)
   if (state.me) (winner === state.me.team ? haptics.won : haptics.lost)()
   myPress.streak = 0
 
+  const frames = gameOver ? GAME_OVER : ROUND_OVER
+  const text = gameOver ? `${winner} win` : `Point to ${winner}`
+  // The score is scheduled up front against the same timeline the flash plays.
+  sound.score(cues(frames, text), !state.me ? 'neutral' : winner === state.me.team ? 'won' : 'lost', gameOver)
   const started = performance.now()
-  playFlash(gameOver ? GAME_OVER : ROUND_OVER, gameOver ? `${winner} win` : `Point to ${winner}`, onRoundEvent, () => performance.now() - started, () => {})
+  playFlash(frames, text, onRoundEvent, () => performance.now() - started, () => {})
 }
 
 hooks.countdown = () => {

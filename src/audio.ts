@@ -56,7 +56,14 @@ export class Sound {
     this.context = context
     this.master = context.createGain()
     this.master.gain.value = this.muted ? 0 : 1
-    this.master.connect(context.destination)
+    // A limiter at the end, so stacked hits get loud without distorting.
+    const limiter = context.createDynamicsCompressor()
+    limiter.threshold.value = -6
+    limiter.knee.value = 4
+    limiter.ratio.value = 16
+    limiter.attack.value = 0.002
+    limiter.release.value = 0.2
+    this.master.connect(limiter).connect(context.destination)
 
     this.analyser = context.createAnalyser()
     this.analyser.fftSize = 512
@@ -330,36 +337,182 @@ export class Sound {
     this.tone('triangle', 1200, 900, 0, 0.03, 0.05)
   }
 
-  /** The original's Tong voice for a loss, and a rising stab for a win. */
-  roundOver(won: boolean) {
+  /** The original's Tong voice, for the side that lost a round. */
+  private tong(delay: number) {
+    const context = this.context
+    const names = [...this.voices.keys()]
+    const buffer = this.voices.get(names[Math.floor(Math.random() * names.length)]!)
+    if (!context || !buffer) return
+    const source = context.createBufferSource()
+    source.buffer = buffer
+    // A touch louder than the score so it reads over it.
+    const gain = context.createGain()
+    gain.gain.value = 1.3
+    source.connect(gain).connect(this.master)
+    source.start(context.currentTime + delay)
+  }
+
+  /** A soft-clipping stage for the stabs, built once. */
+  private drive: WaveShaperNode | null = null
+  private driven() {
+    if (!this.drive) {
+      const curve = new Float32Array(1024)
+      for (let i = 0; i < curve.length; i++) {
+        const x = (i / (curve.length - 1)) * 2 - 1
+        curve[i] = Math.tanh(x * 4)
+      }
+      this.drive = this.context!.createWaveShaper()
+      this.drive.curve = curve
+      const trim = this.context!.createGain()
+      trim.gain.value = 0.35
+      this.drive.connect(trim).connect(this.master)
+    }
+    return this.drive
+  }
+
+  /** A burst of filtered noise with an instant attack. */
+  private crash(delay: number, duration: number, level: number, cutoff: number) {
+    const context = this.context!
+    const at = context.currentTime + delay
+    const source = context.createBufferSource()
+    source.buffer = this.noise
+    source.loop = true
+    const filter = context.createBiquadFilter()
+    filter.type = 'highpass'
+    filter.frequency.value = cutoff
+    const gain = context.createGain()
+    gain.gain.setValueAtTime(level, at)
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
+    source.connect(filter).connect(gain).connect(this.master)
+    source.start(at)
+    source.stop(at + duration + 0.02)
+  }
+
+  /** A chord of saws through the drive. */
+  private stab(delay: number, root: number, ratios: number[], duration: number, level: number) {
+    const context = this.context!
+    const at = context.currentTime + delay
+    for (const ratio of ratios) {
+      for (const detune of [-8, 8]) {
+        const osc = context.createOscillator()
+        const gain = context.createGain()
+        osc.type = 'sawtooth'
+        osc.frequency.value = root * ratio
+        osc.detune.value = detune
+        gain.gain.setValueAtTime(level, at)
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
+        osc.connect(gain).connect(this.driven())
+        osc.start(at)
+        osc.stop(at + duration + 0.02)
+      }
+    }
+  }
+
+  /** The hit that opens a sequence: a sub drop, a crash and a driven chord. */
+  private impact(delay: number, chord: number[], big: boolean) {
+    this.tone('sine', 160, 30, delay, big ? 1.4 : 0.9, 0.65)
+    this.tone('triangle', 90, 40, delay, 0.25, 0.45)
+    this.crash(delay, big ? 1.6 : 1, 0.45, 3000)
+    this.stab(delay, 110, chord, big ? 1.4 : 0.9, 0.5)
+  }
+
+  /**
+   * The strobe as sound: noise and a low buzz gated on every flip, louder as
+   * it goes. Slow strobes get a kick on each flip instead of a buzz.
+   */
+  private stutter(from: number, to: number, period: number, level: number, pitch: number) {
+    const context = this.context!
+    const start = context.currentTime + from
+    const length = to - from
+    const gate = context.createGain()
+    gate.gain.setValueAtTime(0, start)
+    gate.connect(this.master)
+
+    const noise = context.createBufferSource()
+    noise.buffer = this.noise
+    noise.loop = true
+    const filter = context.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.Q.value = 0.8
+    filter.frequency.setValueAtTime(1200, start)
+    filter.frequency.exponentialRampToValueAtTime(5000, start + length)
+    noise.connect(filter).connect(gate)
+    noise.start(start)
+    noise.stop(start + length + 0.05)
+
+    const buzz = context.createOscillator()
+    buzz.type = 'square'
+    buzz.frequency.value = pitch
+    const buzzLevel = context.createGain()
+    buzzLevel.gain.value = 0.35
+    buzz.connect(buzzLevel).connect(gate)
+    buzz.start(start)
+    buzz.stop(start + length + 0.05)
+
+    const step = period / 1000
+    const flips = Math.ceil(length / step)
+    for (let i = 0; i < flips; i++) {
+      const at = start + i * step
+      const swell = level * (0.45 + 0.55 * (i / Math.max(1, flips - 1)))
+      gate.gain.setValueAtTime(swell, at)
+      gate.gain.setValueAtTime(0, at + Math.min(step * 0.55, 0.06))
+      if (period >= 120) this.tone('sine', 130, 38, from + i * step, 0.14, 0.8)
+    }
+  }
+
+  /**
+   * The score for a round or game ending, laid on the same timeline as its
+   * flash: an impact, the strobe as a gated buzz, a note per letter climbing
+   * for a win and falling for a loss, a riser into each faster strobe, and a
+   * last hit. Times are ms into the sequence.
+   */
+  score(cues: { strobes: { from: number; to: number; period: number }[]; letters: number[]; end: number }, mood: 'won' | 'lost' | 'neutral', gameOver: boolean) {
     const context = this.context
     if (!context) return
+    // Scheduled ahead of output latency so it's heard as the frame is seen.
+    const lead = context.outputLatency || context.baseLatency || 0
+    const at = (ms: number) => Math.max(0, ms / 1000 - lead)
+    const lost = mood === 'lost'
+    const major = [1, 1.26, 1.5, 2]
+    const diminished = [1, 1.19, 1.41, 1.68]
 
-    if (!won) {
-      const names = [...this.voices.keys()]
-      const buffer = this.voices.get(names[Math.floor(Math.random() * names.length)]!)
-      if (!buffer) return
-      const source = context.createBufferSource()
-      source.buffer = buffer
-      source.connect(this.master)
-      source.start()
-      return
+    this.impact(0, lost ? diminished : major, gameOver)
+    if (lost) this.tong(0.35)
+
+    for (const [i, strobe] of cues.strobes.entries()) {
+      // Under the voice, the strobe backs off so it can be heard.
+      const level = (strobe.period < 60 ? 0.45 : strobe.period < 120 ? 0.36 : 0.25) * (lost && i === 0 ? 0.6 : 1)
+      this.stutter(at(strobe.from), at(strobe.to), strobe.period, level, lost ? 55 : 82)
+      if (i > 0) {
+        // A riser into a strobe change, and a drop when it lands.
+        this.whoosh(300, 7000, 0.6, 0.35, Math.max(0, at(strobe.from) - 0.6))
+        this.impact(at(strobe.from), lost ? diminished : major, false)
+      }
     }
 
-    const now = context.currentTime
-    this.whoosh(400, 5000, 0.5, 0.25)
-    for (const [i, ratio] of [1, 1.25, 1.5, 2].entries()) {
-      const osc = context.createOscillator()
-      const gain = context.createGain()
-      osc.type = 'sawtooth'
-      osc.frequency.setValueAtTime(220 * ratio, now + i * 0.06)
-      osc.frequency.exponentialRampToValueAtTime(440 * ratio, now + 0.5)
-      gain.gain.setValueAtTime(0.0001, now)
-      gain.gain.linearRampToValueAtTime(0.06, now + i * 0.06 + 0.02)
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9)
-      osc.connect(gain).connect(this.master)
-      osc.start(now + i * 0.06)
-      osc.stop(now + 1)
+    // One note per letter: up a major pentatonic for a win, down a minor one for a loss.
+    const up = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3]
+    const down = [2, 9 / 5, 3 / 2, 4 / 3, 6 / 5]
+    cues.letters.forEach((ms, i) => {
+      const scale = lost ? down : up
+      const octave = lost ? 2 ** -Math.floor(i / 5) : 2 ** Math.floor(i / 5)
+      const pitch = 330 * scale[i % 5]! * octave
+      this.tone('square', pitch, pitch, at(ms), 0.11, 0.13)
+      this.tone('sine', pitch / 2, pitch / 2, at(ms), 0.15, 0.18)
+    })
+
+    // The last hit: a riser into it, then a held chord for a win or a sinking glide for a loss.
+    const end = at(cues.end)
+    this.whoosh(250, 9000, 0.7, 0.4, Math.max(0, end - 0.7))
+    this.tone('sine', 140, 30, end, 0.8, 0.8)
+    this.crash(end, 0.8, 0.35, 4000)
+    if (!gameOver) return
+    if (lost) {
+      this.tone('sawtooth', 220, 40, end, 1.8, 0.12)
+      this.tone('sawtooth', 233, 42, end, 1.8, 0.1)
+    } else {
+      this.stab(end, 220, major, 1.8, 0.4)
+      this.stab(end + 0.12, 440, major, 1.6, 0.25)
     }
   }
 }
