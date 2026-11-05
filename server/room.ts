@@ -1,3 +1,4 @@
+import { beatLength, dropWithin, nextBeat, type Analysis } from '../shared/music'
 import {
   DEFAULT_SETTINGS,
   EMOJI,
@@ -51,6 +52,8 @@ export interface RoomOptions {
   random?: () => number
   /** Called with each finished game, for the leaderboard. */
   onResults?: (results: Results) => void
+  /** The analysis of a track, if it's ready, so play can be timed to it. */
+  music?: (trackId: string) => Analysis | null
 }
 
 /**
@@ -84,10 +87,14 @@ export class Room {
   private tracks: Track[]
   private trackIndex: number
   private trackStartedAt: number
+  private musicOf: (trackId: string) => Analysis | null
+  private frenzyMs = FRENZY_MS
+  private tickMs = 1000
   private random: () => number
   private onResults: (results: Results) => void
 
-  constructor({ id, public: isPublic, tracks, now, random = Math.random, onResults = () => {} }: RoomOptions) {
+  constructor({ id, public: isPublic, tracks, now, random = Math.random, onResults = () => {}, music = () => null }: RoomOptions) {
+    this.musicOf = music
     this.id = id
     this.public = isPublic
     this.tracks = tracks
@@ -136,7 +143,7 @@ export class Room {
     this.seatBot(now)
 
     send({ t: 'welcome', you: player, room: this.snapshot() })
-    send({ t: 'track', track: this.track, elapsedMs: now - this.trackStartedAt })
+    send({ t: 'track', track: this.track, elapsedMs: now - this.trackStartedAt, startedAt: this.trackStartedAt })
     for (const message of this.chat) send({ t: 'chat', message })
     this.broadcastRoom(id)
     return player
@@ -146,7 +153,7 @@ export class Room {
   watch(id: string, send: (message: ServerMessage) => void, now: number) {
     this.spectators.set(id, send)
     send({ t: 'welcome', you: null, room: this.snapshot() })
-    send({ t: 'track', track: this.track, elapsedMs: now - this.trackStartedAt })
+    send({ t: 'track', track: this.track, elapsedMs: now - this.trackStartedAt, startedAt: this.trackStartedAt })
     for (const message of this.chat) send({ t: 'chat', message })
     this.broadcastRoom(id)
   }
@@ -189,7 +196,12 @@ export class Room {
     this.score = { creators: 0, destroyers: 0 }
     for (const seat of this.seats.values()) Object.assign(seat, { presses: 0, peakPps: 0, recent: [] })
     this.botPresses = 0
-    this.setPhase('countdown', now + COUNTDOWN_MS, now)
+    // Ticks a whole number of beats apart, as near a second as fits; GO on a
+    // downbeat, or on a drop if one is coming up.
+    const beat = this.beat(now)
+    this.tickMs = beat ? beat * Math.max(1, Math.round(1000 / beat)) : 1000
+    const earliest = Math.max(COUNTDOWN_MS - 600, 3 * this.tickMs)
+    this.setPhase('countdown', this.moment(now, earliest, earliest + 4000) ?? now + COUNTDOWN_MS, now)
   }
 
   press(id: string, now: number) {
@@ -244,8 +256,11 @@ export class Room {
     if (this.phase === 'playing') {
       if (now >= this.frenzyAt) {
         this.frenzyAt = Infinity
-        this.frenzyUntil = now + FRENZY_MS
-        this.broadcast({ t: 'frenzy', active: true, ms: FRENZY_MS })
+        // Eight beats of double time, when there's a beat to count.
+        const beat = this.beat(now)
+        this.frenzyMs = beat ? Math.min(6000, Math.max(3000, Math.round(beat * 8))) : FRENZY_MS
+        this.frenzyUntil = now + this.frenzyMs
+        this.broadcast({ t: 'frenzy', active: true, ms: this.frenzyMs })
       } else if (this.frenzyUntil && now >= this.frenzyUntil) {
         this.endFrenzy()
       }
@@ -305,7 +320,8 @@ export class Room {
       this.broadcast({ t: 'results', results })
       this.onResults(results)
     } else {
-      this.setPhase('roundOver', now + ROUND_OVER_MS, now)
+      // The next round starts once the flash has played, on the music if it can.
+      this.setPhase('roundOver', this.moment(now, ROUND_OVER_MS, ROUND_OVER_MS + 3500) ?? now + ROUND_OVER_MS, now)
     }
   }
 
@@ -341,9 +357,11 @@ export class Room {
     if (phase === 'playing') {
       this.botNextPressAt = now + 400
       this.clearOrb()
-      this.orbAt = now + this.orbDelay()
-      // Somewhere in the middle of the round, if it lasts that long.
-      this.frenzyAt = this.settings.frenzy ? now + 6000 + this.random() * 12000 : Infinity
+      this.orbAt = this.onDownbeat(now, now + this.orbDelay())
+      // On a drop if one comes in the round's first half-minute; otherwise
+      // somewhere in the middle of the round, on a downbeat.
+      const drop = this.moment(now, 5000, 30000, true, true)
+      this.frenzyAt = !this.settings.frenzy ? Infinity : drop ?? this.onDownbeat(now, now + 6000 + this.random() * 12000)
     }
     this.broadcast({
       t: 'phase',
@@ -351,8 +369,42 @@ export class Room {
       winner: this.winner,
       score: this.score,
       count: this.count,
-      countdownMs: phase === 'countdown' ? COUNTDOWN_MS : undefined,
+      endsInMs: phase === 'countdown' || phase === 'roundOver' ? endsAt - now : undefined,
+      endsAt: phase === 'countdown' || phase === 'roundOver' ? endsAt : undefined,
+      tickMs: phase === 'countdown' ? this.tickMs : undefined,
     })
+  }
+
+  /** The current track's analysis, if ready. */
+  private get music() {
+    return this.musicOf(this.track.id)
+  }
+
+  /** The beat length right now, or null without an analysis. */
+  private beat(now: number) {
+    const music = this.music
+    return music ? beatLength(music, now - this.trackStartedAt) : null
+  }
+
+  /**
+   * The best musical moment between `from` and `to` ms from now: a drop if
+   * there is one (or only a drop, with `dropOnly`), else the first downbeat.
+   * Null without an analysis, or if the moment would fall past the song's end.
+   */
+  private moment(now: number, from: number, to: number, preferDrop = true, dropOnly = false) {
+    const music = this.music
+    if (!music) return null
+    const start = this.trackStartedAt
+    const [lo, hi] = [now + from - start, now + to - start]
+    const drop = preferDrop ? dropWithin(music, lo, hi) : null
+    const at = drop ?? (dropOnly ? null : nextBeat(music, lo, true)?.at ?? null)
+    if (at === null || at > hi || at > this.track.durationMs - 500) return null
+    return start + at
+  }
+
+  /** `at`, moved to the next downbeat if there's music to follow. */
+  private onDownbeat(now: number, at: number) {
+    return this.moment(now, at - now, at - now + 2500, false) ?? at
   }
 
   private orbDelay() {
@@ -389,7 +441,7 @@ export class Room {
       this.trackIndex = next >= this.trackIndex ? next + 1 : next
     }
     this.trackStartedAt = now
-    this.broadcast({ t: 'track', track: this.track, elapsedMs: 0 })
+    this.broadcast({ t: 'track', track: this.track, elapsedMs: 0, startedAt: now })
   }
 
   /** Teams fill evenly; ties go to the creators, as they did in the original. */

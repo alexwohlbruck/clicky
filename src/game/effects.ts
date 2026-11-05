@@ -1,3 +1,4 @@
+import { nextBeat } from '../../shared/music'
 import { MAX, START, type Team } from '../../shared/protocol'
 import { Sound } from '../audio'
 import { Flash, GAME_OVER, INTRO, ROUND_OVER, cues, introIntensity, type FlashEvent, type Frames } from '../flash'
@@ -31,6 +32,8 @@ let orbShown = 0
 let myPress = { at: 0.5, time: -Infinity, team: 'creators' as Team, streak: 0 }
 let wasOnFire = false
 let nextHeartbeat = 0
+/** How close your side is to losing, 0 to 1. */
+let danger = 0
 
 let flash: { player: Flash; clock: () => number } | null = null
 let introStarted = false
@@ -161,22 +164,57 @@ hooks.roundOver = (winner, gameOver) => {
   const text = gameOver ? `${winner} win` : `Point to ${winner}`
   // The score is scheduled up front against the same timeline the flash plays.
   sound.score(cues(frames, text), !state.me ? 'neutral' : winner === state.me.team ? 'won' : 'lost', gameOver)
+  // The song cuts dead on the hit. After a round it comes back muffled once
+  // the flash has played (see \`waiting\`); after a game, in full for the lobby.
+  sound.cutSong()
   const started = performance.now()
-  playFlash(frames, text, onRoundEvent, () => performance.now() - started, () => {})
+  playFlash(frames, text, onRoundEvent, () => performance.now() - started, () => {
+    if (gameOver) sound.openSong()
+  })
 }
 
-hooks.countdown = () => {
+/**
+ * When play starts, by the server's clock, nudged onto this player's own
+ * nearest beat: the server times it to the song, but each player hears the
+ * song a little early or late depending on their connection.
+ */
+function onBeat(delay: number) {
+  const analysis = sound.analysis
+  const ms = sound.musicMs()
+  if (!analysis || ms === null) return delay
+  const target = ms + delay * 1000
+  const beat = nextBeat(analysis, target - 150)
+  return beat && Math.abs(beat.at - target) <= 150 ? Math.max(0, delay + (beat.at - target) / 1000) : delay
+}
+
+/** Play resumes after a round: the song opens up and GO hits, on the beat. */
+hooks.waiting = (endsInMs) => {
+  const at = onBeat(endsInMs / 1000)
+  // Muffled once the flash is over, then open with GO. In that order: each
+  // change clears whatever was scheduled after it.
+  sound.muffleSong(cues(ROUND_OVER, '').end / 1000)
+  sound.go(at)
+  sound.openSong(at)
+}
+
+hooks.countdown = (endsInMs, tickMs) => {
   trauma = 0.4
   shock(innerWidth / 2, innerHeight / 2, 0.6)
-  // 3, 2, 1 a second apart; GO is played when the round starts.
+  // The song waits under the countdown, muffled; 3, 2, 1 tick on its beats,
+  // and it opens up with GO.
+  sound.muffleSong()
+  const end = onBeat(endsInMs / 1000)
   for (let i = 0; i < 3; i++) {
-    sound.countdownTick(i, i)
-    setTimeout(haptics.tick, i * 1000)
+    const delay = end - ((3 - i) * tickMs) / 1000
+    if (delay < -0.05) continue
+    sound.countdownTick(i, Math.max(0, delay))
+    setTimeout(haptics.tick, Math.max(0, delay * 1000))
   }
+  sound.go(end)
+  sound.openSong(end)
 }
 
 hooks.go = () => {
-  sound.go()
   haptics.go()
   const { x, y } = tip()
   shock(x, y, 1)
@@ -212,6 +250,29 @@ hooks.chat = () => sound.chatTick()
 hooks.roster = (joined) => sound.roster(joined)
 
 hooks.track = (track, elapsedMs) => sound.playTrack(track, elapsedMs)
+hooks.retime = (elapsedMs) => sound.retime(elapsedMs)
+
+// --- The song's beats and drops --------------------------------------------------
+
+sound.onBeat = (index, downbeat) => {
+  // Close to losing, the heartbeat lands on the beat: every other beat, then every beat.
+  if (danger > 0.05 && (danger > 0.5 || index % 2 === 0)) {
+    sound.heartbeat(danger)
+    haptics.heartbeat()
+  }
+  // In play, each bar gives the picture a small kick, more in the loud parts.
+  if (downbeat && playing() && state.room?.phase === 'playing') spike = Math.max(spike, 0.25 * sound.energy())
+}
+
+sound.onDrop = () => {
+  if (state.screen === 'intro' || flash) return
+  const inPlay = playing()
+  const center = inPlay ? tip() : { x: frameRect.x + frameRect.w / 2, y: frameRect.y + frameRect.h * 0.35 }
+  shock(center.x, center.y, inPlay ? 1.1 : 0.8)
+  trauma = Math.max(trauma, inPlay ? 0.7 : 0.4)
+  spike = Math.max(spike, 0.9)
+  emit({ x: center.x, y: center.y, count: inPlay ? 500 : 300, kind: Kind.Spark, speed: 1900, life: 1.2, size: 12 })
+}
 
 // --- Flash sequences -----------------------------------------------------------
 
@@ -356,7 +417,8 @@ function frame(now: number) {
   // Your side close to losing: a heartbeat you hear and feel, quicker as it gets worse.
   const me = state.me
   const myDanger = inGame && me && state.room?.phase === 'playing' ? (me.team === 'creators' ? smoothstep(0.25, 0.05, shown) : smoothstep(0.75, 0.95, shown)) : 0
-  if (myDanger > 0.05 && now > nextHeartbeat) {
+  danger = myDanger
+  if (!sound.analysis && myDanger > 0.05 && now > nextHeartbeat) {
     sound.heartbeat(myDanger)
     haptics.heartbeat()
     nextHeartbeat = now + 950 - myDanger * 550
@@ -373,6 +435,9 @@ function frame(now: number) {
   const split = (Math.round((chaos * 5 + trauma * 6) * 2) / 2).toFixed(1)
   if (split !== lastSplit) stageEl.style.setProperty('--split', `${(lastSplit = split)}px`)
 
+  // The song's clock runs whether or not there's anything to draw.
+  const beat = sound.beat()
+
   if (stage) {
     const u = stage.uniforms
     u.frame.value.set(frameRect.x, frameRect.y, frameRect.w, frameRect.h)
@@ -386,7 +451,7 @@ function frame(now: number) {
     u.pulseCreators.value = pulse.creators
     u.pulseDestroyers.value = pulse.destroyers
     u.shock.value.set(shockOrigin.x, shockOrigin.y, (now - shockAt) / 1000, shockStrength)
-    u.beat.value = sound.beat()
+    u.beat.value = beat
     u.frenzy.value = frenzy
     // The orb fades in where it spawns and out when it's taken.
     orbShown += ((inGame && state.orb !== null ? 1 : 0) - orbShown) * (1 - Math.exp(-dt * 10))
@@ -403,7 +468,7 @@ function frame(now: number) {
     u.menu.value = menu
 
     // A slow drizzle of sparks off the seam between screens.
-    if (!inGame && state.screen !== 'intro' && Math.random() < dt * 2) {
+    if (!inGame && state.screen !== 'intro' && Math.random() < dt * (1 + 4 * sound.energy() * sound.energy())) {
       emit({ x: frameRect.x + frameRect.w * u.boundary.value, y: frameRect.y + Math.random() * frameRect.h, count: 5, kind: Kind.Spark, speed: 140, angle: -Math.PI / 2, spread: 2.5, height: 20, life: 1.6, size: 7 })
     }
 

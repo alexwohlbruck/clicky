@@ -105,10 +105,19 @@ export type ServerMessage =
   | { t: 'room'; room: RoomSnapshot }
   /** Sent at most once per tick, with the presses that produced the change. */
   | { t: 'state'; count: number; presses: Score; tally: Record<string, number> }
-  | { t: 'phase'; phase: Phase; winner: Team | null; score: Score; count: number; countdownMs?: number }
+  /**
+   * `endsInMs` is when a countdown or round-over gives way to play, timed to
+   * the music; `tickMs` spaces the countdown's ticks, a whole number of beats.
+   */
+  | { t: 'phase'; phase: Phase; winner: Team | null; score: Score; count: number; endsInMs?: number; endsAt?: number; tickMs?: number }
   | { t: 'results'; results: Results }
-  /** `elapsedMs` is how far into the track the room is, as of sending. */
-  | { t: 'track'; track: Track; elapsedMs: number }
+  /**
+   * `elapsedMs` is how far into the track the room is, as of sending;
+   * `startedAt` is when it started, on the server's clock (see `pong`).
+   */
+  | { t: 'track'; track: Track; elapsedMs: number; startedAt: number }
+  /** The server's clock, answering a `ping`, so timings can be read on ours. */
+  | { t: 'pong'; at: number; server: number }
   | { t: 'react'; id: string; emoji: Emoji }
   | { t: 'frenzy'; active: boolean; ms: number }
   | { t: 'chat'; message: ChatMessage }
@@ -122,6 +131,8 @@ export type ClientMessage =
   /** `room` joins that code; `create` opens a new room; neither is quick play. */
   | { t: 'join'; name: string; room?: string; create?: boolean; watch?: boolean }
   | { t: 'press' }
+  /** `at` is the client's clock, echoed back in the `pong`. */
+  | { t: 'ping'; at: number }
   | { t: 'skip' }
   | { t: 'team'; team: Team }
   | { t: 'start' }

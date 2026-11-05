@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join, normalize } from 'node:path'
 import { ROOM_CAPACITY, type ClientMessage, type RoomListing, type ServerMessage, type Track } from '../shared/protocol'
 import tracks from '../shared/tracks.json'
+import { Analyses } from './analysis'
 import { Leaderboard } from './leaderboard'
 import { Room } from './room'
 
@@ -19,6 +20,16 @@ const rooms = new Map<string, Room>()
 await mkdir(DATA, { recursive: true })
 const leaderboard = await Leaderboard.open(join(DATA, 'leaderboard.json'))
 
+/** Beats, bars and drops for every track, worked out once and kept. */
+const analyses = new Analyses(DATA, (id) => {
+  const url = new URL('/v1/stream', JUKEBOX_URL)
+  url.searchParams.set('spotifyTrackId', id)
+  return url.href
+})
+/** What a room asks while it plays: the answer if it's ready, and work on it if not. */
+const music = (id: string) => analyses.peek(id) ?? (void analyses.get(id, true), null)
+void analyses.warm(playlist.map((track) => track.id))
+
 interface SocketData {
   id: string
   roomId?: string
@@ -34,7 +45,7 @@ function roomCode() {
 }
 
 function openRoom(isPublic: boolean, now: number) {
-  const room = new Room({ id: roomCode(), public: isPublic, tracks: playlist, now, onResults: (results) => leaderboard.record(results) })
+  const room = new Room({ id: roomCode(), public: isPublic, tracks: playlist, now, music, onResults: (results) => leaderboard.record(results) })
   rooms.set(room.id, room)
   return room
 }
@@ -78,6 +89,26 @@ async function proxyMusic(url: URL): Promise<Response> {
   })
 }
 
+/**
+ * A song the server has kept, with byte ranges so the browser can seek in it.
+ * 404 until it's been analysed; the client falls back to Jukebox's stream.
+ */
+async function serveSong(id: string, request: Request): Promise<Response> {
+  const file = knownTracks.has(id) ? analyses.song(id) : null
+  if (!file || !(await file.exists())) return new Response('Not kept yet', { status: 404 })
+  const size = file.size
+  const headers = { 'Content-Type': 'audio/mpeg', 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=86400' }
+  const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('Range') ?? '')
+  if (!range) return new Response(file, { headers: { ...headers, 'Content-Length': String(size) } })
+  const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]))
+  const end = range[1] && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1
+  if (start >= size || start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } })
+  return new Response(file.slice(start, end + 1), {
+    status: 206,
+    headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1) },
+  })
+}
+
 async function serveStatic(url: URL): Promise<Response> {
   const path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '')
   const file = Bun.file(join(DIST, path))
@@ -96,9 +127,17 @@ const server = Bun.serve<SocketData>({
       const upgraded = server.upgrade(request, { data: { id: crypto.randomUUID() } })
       return upgraded ? undefined : new Response('Expected a WebSocket', { status: 426 })
     }
+    if (/^\/music\/\w+\/file$/.test(url.pathname)) return serveSong(url.pathname.split('/')[2]!, request)
     if (url.pathname.startsWith('/music/')) return proxyMusic(url)
     if (url.pathname === '/api/rooms') return Response.json(listings())
     if (url.pathname === '/api/leaderboard') return Response.json(leaderboard.top())
+    if (url.pathname.startsWith('/api/analysis/')) {
+      const id = url.pathname.split('/').pop() ?? ''
+      if (!knownTracks.has(id)) return new Response('Unknown track', { status: 404 })
+      const analysis = await analyses.get(id, true)
+      // Analyses never change, so the browser can keep them.
+      return analysis ? Response.json(analysis, { headers: { 'Cache-Control': 'public, max-age=86400' } }) : new Response('Not analysed', { status: 503 })
+    }
     if (url.pathname === '/health') return Response.json({ ok: true, rooms: rooms.size })
 
     return serveStatic(url)
@@ -119,6 +158,10 @@ const server = Bun.serve<SocketData>({
       const send = (out: ServerMessage) => socket.send(JSON.stringify(out))
 
       switch (message.t) {
+        case 'ping':
+          // Answered straight away: the round trip is how the client measures our clock.
+          if (typeof message.at === 'number') send({ t: 'pong', at: message.at, server: Date.now() })
+          break
         case 'join': {
           if (room) return
           let joined: Room | undefined

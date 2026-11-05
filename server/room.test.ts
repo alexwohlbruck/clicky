@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { ANALYSIS_VERSION } from '../shared/music'
 import { MAX, START, type Results, type ServerMessage, type Track } from '../shared/protocol'
 import { COUNTDOWN_MS, GAME_OVER_MS, MAX_PRESSES_PER_SECOND, ROUND_OVER_MS, Room } from './room'
 
@@ -211,5 +212,57 @@ describe('Room', () => {
     expect(room.empty).toBe(false)
     room.leave('tv', 0)
     expect(room.empty).toBe(true)
+  })
+})
+
+describe('Room timed to the music', () => {
+  // 120 BPM from the top, bars starting on every fourth beat, a drop at 40 s.
+  const beats = Array.from({ length: 1200 }, (_, i) => i * 500)
+  const analysis = { version: ANALYSIS_VERSION, bpm: 120, beats, downbeat: 0, sections: [], drops: [40_000] }
+
+  function musical() {
+    const room = new Room({ id: 'BEAT', public: true, tracks, now: 0, random: () => 0.5, music: () => analysis })
+    const inbox: ServerMessage[] = []
+    room.join('p1', 'p1', (message) => inbox.push(message), 0)
+    room.join('p2', 'p2', () => {}, 0)
+    const phase = (name: string) => inbox.filter((m) => m.t === 'phase' && m.phase === name).at(-1) as Extract<ServerMessage, { t: 'phase' }>
+    return { room, inbox, phase }
+  }
+
+  test('the countdown ticks on beats and ends on a downbeat', () => {
+    const { room, phase } = musical()
+    room.settings.frenzy = false
+    room.start('p1', 1234)
+    const countdown = phase('countdown')
+    expect(countdown.tickMs).toBe(1000)
+    const go = 1234 + countdown.endsInMs!
+    expect(go % 2000).toBe(0)
+    expect(countdown.endsInMs!).toBeGreaterThanOrEqual(3 * countdown.tickMs!)
+  })
+
+  test('a drop coming up is where the round starts, and where double time hits', () => {
+    const { room, inbox, phase } = musical()
+    room.settings.frenzy = true
+    room.start('p1', 36_000)
+    expect(36_000 + phase('countdown').endsInMs!).toBe(40_000)
+
+    // Double time waits for the next drop; with none in reach, it lands on a downbeat.
+    room.tick(40_000)
+    const frenzyMessage = () => inbox.find((m) => m.t === 'frenzy' && m.active) as Extract<ServerMessage, { t: 'frenzy' }> | undefined
+    for (let now = 40_000; now < 70_000 && !frenzyMessage(); now += 50) room.tick(now)
+    const frenzy = frenzyMessage()!
+    expect(frenzy.ms).toBe(4000)
+  })
+
+  test('orbs appear on downbeats', () => {
+    const { room, inbox } = musical()
+    room.settings.frenzy = false
+    room.start('p1', 1000)
+    let spawned = -1
+    for (let now = 1000; now < 30_000 && spawned < 0; now += 10) {
+      room.tick(now)
+      if (inbox.some((m) => m.t === 'orb' && m.at !== null)) spawned = now
+    }
+    expect(spawned % 2000).toBeLessThan(10)
   })
 })

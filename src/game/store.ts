@@ -52,6 +52,8 @@ export const state = reactive({
   showResults: false,
   frenzyUntil: 0,
   countdownEndsAt: 0,
+  /** Time between the countdown's ticks: a whole number of beats. */
+  tickMs: 1000,
   reactions: [] as FloatingReaction[],
   error: '',
   /** The latest achievement, for its toast. */
@@ -75,10 +77,14 @@ export const state = reactive({
 export const hooks = {
   press: (_team: Team, _mine: boolean) => {},
   roundOver: (_winner: Team, _gameOver: boolean) => {},
-  countdown: () => {},
+  /** A countdown or round-over that gives way to play in `endsInMs`, ticking every `tickMs`. */
+  countdown: (_endsInMs: number, _tickMs: number) => {},
+  waiting: (_endsInMs: number) => {},
   go: () => {},
   frenzy: (_active: boolean) => {},
   track: (_track: Track, _elapsedMs: number) => {},
+  /** A better reading of how far into its song the room is. */
+  retime: (_elapsedMs: number) => {},
   surge: (_team: Team, _at: number) => {},
   orb: () => {},
   react: () => {},
@@ -113,6 +119,24 @@ export function saveProfile() {
   localStorage.setItem('clicky-name', state.profile.name)
 }
 
+/**
+ * The server's clock, on ours: a few pings, keeping the quickest round trip,
+ * whose middle is when the server read its clock. Timings the server sends
+ * (when a song started, when play begins) are then exact here, however long
+ * a message took to arrive or to be handled.
+ */
+export const clock = { offset: 0, rtt: Infinity, synced: false }
+/** When the room's song started, on the server's clock, to re-read as the clock improves. */
+let trackStartedAt: number | null = null
+let pingTimer = 0
+export const serverNow = () => performance.now() + clock.offset
+/** A server time as milliseconds from now, or `fallback` until the clock is known. */
+const fromNow = (serverTime: number | undefined, fallback: number) => (clock.synced && serverTime !== undefined ? serverTime - serverNow() : fallback)
+
+function ping() {
+  send({ t: 'ping', at: performance.now() })
+}
+
 function connect() {
   const url = new URL('/ws', location.href)
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -120,10 +144,17 @@ function connect() {
   socket.onopen = () => {
     state.connected = true
     if (pendingJoin) send(pendingJoin)
+    // A burst to measure the clock, then the odd one to keep it honest.
+    clock.rtt = Infinity
+    for (let i = 0; i < 6; i++) setTimeout(ping, i * 150)
+    for (let i = 1; i <= 10; i++) setTimeout(ping, i * 2000)
+    clearInterval(pingTimer)
+    pingTimer = window.setInterval(ping, 10_000)
   }
   socket.onmessage = (event) => receive(JSON.parse(event.data) as ServerMessage)
   socket.onclose = () => {
     state.connected = false
+    clearInterval(pingTimer)
     socket = null
     // Rejoin the same room if we were in one; it may have closed, in which case we land home.
     if (state.room) {
@@ -239,17 +270,19 @@ function receive(message: ServerMessage) {
       Object.assign(room, { phase: message.phase, winner: message.winner, score: message.score, count: message.count })
       state.unconfirmed = 0
       if (message.phase === 'countdown') {
-        state.countdownEndsAt = performance.now() + (message.countdownMs ?? 3000)
+        state.countdownEndsAt = performance.now() + fromNow(message.endsAt, message.endsInMs ?? 3000)
+        state.tickMs = message.tickMs ?? 1000
         state.myPresses = 0
         state.tally = {}
         state.orb = null
         state.showResults = false
-        hooks.countdown()
+        hooks.countdown(fromNow(message.endsAt, message.endsInMs ?? 3000), message.tickMs ?? 1000)
       }
-      if (message.phase === 'playing' && previous === 'countdown') hooks.go()
+      if (message.phase === 'playing' && (previous === 'countdown' || previous === 'roundOver')) hooks.go()
       if ((message.phase === 'roundOver' || message.phase === 'gameOver') && previous === 'playing' && message.winner) {
         hooks.roundOver(message.winner, message.phase === 'gameOver')
       }
+      if (message.phase === 'roundOver' && message.endsInMs) hooks.waiting(fromNow(message.endsAt, message.endsInMs))
       break
     }
 
@@ -276,8 +309,22 @@ function receive(message: ServerMessage) {
 
     case 'track':
       state.track = message.track
-      hooks.track(message.track, message.elapsedMs)
+      trackStartedAt = message.startedAt
+      hooks.track(message.track, -fromNow(message.startedAt, -message.elapsedMs))
       break
+
+    case 'pong': {
+      const now = performance.now()
+      const rtt = now - message.at
+      // Older samples count for a little less, so a drifting clock is followed.
+      if (rtt <= clock.rtt * 1.2 || rtt < 30) {
+        clock.rtt = Math.min(rtt, clock.rtt)
+        clock.offset = message.server - (message.at + rtt / 2)
+        clock.synced = true
+        if (trackStartedAt !== null && state.room) hooks.retime(serverNow() - trackStartedAt)
+      }
+      break
+    }
 
     case 'react': {
       const player = state.room?.players.find((p) => p.id === message.id)

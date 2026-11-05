@@ -1,5 +1,6 @@
 import type { Team, Track } from '../shared/protocol'
 import playlist from '../shared/tracks.json'
+import { beatIndex, beatLength, isDownbeat, sectionAt, type Analysis } from '../shared/music'
 
 /**
  * Music, voice lines and press sounds through one Web Audio graph. Browsers
@@ -20,6 +21,26 @@ export class Sound {
   private voices = new Map<string, AudioBuffer>()
   private noise!: AudioBuffer
   private smoothedBeat = 0
+
+  /** The room's song goes through a gate and a low-pass, so play can cut it, muffle it and open it up. */
+  private songGate!: GainNode
+  private songFilter!: BiquadFilterNode
+
+  /** The current song's analysis, once the server has it. */
+  analysis: Analysis | null = null
+  /** Where the playing file or stream starts in the song (ms). */
+  private streamStart = 0
+  private streamStartGuessed = false
+  private lastBeatIndex = -1
+  private lastMusicMs = -1
+  private loadedAt = 0
+  private lastSyncAt = 0
+  /** In a room: when the room's song started, on this page's clock, so ours can follow it. */
+  private roomAnchor: number | null = null
+
+  /** Called on each beat of the song, and on each drop. */
+  onBeat: (index: number, downbeat: boolean) => void = () => {}
+  onDrop: () => void = () => {}
 
   /** Called when the playing song changes, so the page can show it. */
   onTrack: (track: Track) => void = () => {}
@@ -72,7 +93,13 @@ export class Sound {
     this.musicBus = context.createGain()
     this.musicBus.connect(this.analyser)
     this.analyser.connect(this.master)
-    context.createMediaElementSource(this.music).connect(this.musicBus)
+    const song = context.createMediaElementSource(this.music)
+    this.songGate = context.createGain()
+    this.songFilter = context.createBiquadFilter()
+    this.songFilter.type = 'lowpass'
+    this.songFilter.frequency.value = 20000
+    song.connect(this.songGate).connect(this.songFilter).connect(this.musicBus)
+
     this.introBuffer = this.introBytes.then((bytes) => context.decodeAudioData(bytes))
 
     this.noise = context.createBuffer(1, context.sampleRate * 0.25, context.sampleRate)
@@ -147,6 +174,7 @@ export class Sound {
    */
   playTrack(track: Track, elapsedMs: number) {
     this.inRoom = true
+    this.roomAnchor = performance.now() - elapsedMs
     if (this.introPlaying) {
       this.pending = { track, elapsedMs, at: performance.now() }
       this.intro?.stop()
@@ -155,18 +183,160 @@ export class Sound {
     this.stream(track, elapsedMs)
   }
 
-  private stream(track: Track, elapsedMs: number) {
-    this.onTrack(track)
-    const url = new URL(`/music/${track.id}`, location.href)
-    url.searchParams.set('startMs', String(Math.max(0, Math.round(elapsedMs))))
-    url.searchParams.set('requestedAtMs', String(Date.now()))
-    this.music.loop = false
-    this.music.src = url.href
-    void this.music.play().catch(() => {})
+  /**
+   * Play a song from `elapsedMs` in. The server keeps a copy of every song it
+   * has analysed, which starts at once and seeks exactly, so that's used when
+   * there is one. Otherwise Jukebox streams it live (seconds to start, and no
+   * seeking), and the kept copy takes over as soon as the server has it.
+   */
+  /** A better reading of the room's position in its song; \`follow\` closes the gap. */
+  retime(elapsedMs: number) {
+    if (!this.inRoom) return
+    this.roomAnchor = performance.now() - elapsedMs
+    this.lastSyncAt = 0
   }
 
-  /** Bass energy of the music, 0 to 1, for the visuals to pulse with. */
+  private stream(track: Track, elapsedMs: number) {
+    this.onTrack(track)
+    this.analysis = null
+    this.kept = false
+    this.lastSyncAt = 0
+    this.lastBeatIndex = -1
+    this.lastMusicMs = -1
+    this.streamStartGuessed = false
+    if (!this.inRoom) this.roomAnchor = null
+    const token = ++this.streamToken
+    const askedAt = performance.now()
+    // Where the song should be by the time it can play.
+    const position = () => (this.roomAnchor !== null ? performance.now() - this.roomAnchor : elapsedMs + performance.now() - askedAt)
+
+    void (async () => {
+      let analysis = await this.fetchAnalysis(track.id, 1500)
+      if (token !== this.streamToken) return
+      if (analysis) return this.playKept(track.id, analysis, position)
+
+      // Jukebox starts the stream where it was asked to (plus 20 ms of encoder
+      // priming, measured), however long the request takes.
+      const url = new URL(`/music/${track.id}`, location.href)
+      url.searchParams.set('startMs', String(Math.max(0, Math.round(elapsedMs))))
+      url.searchParams.set('requestedAtMs', String(Date.now()))
+      this.streamStart = Math.max(0, elapsedMs) + 20
+      this.music.loop = false
+      this.music.src = url.href
+      this.music.addEventListener('loadeddata', () => (this.streamStartGuessed = true), { once: true })
+      void this.music.play().catch(() => {})
+
+      // Keep asking; the server works on a song as soon as someone plays it.
+      for (let attempt = 0; attempt < 12 && !analysis; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 5000))
+        if (token !== this.streamToken) return
+        analysis = await this.fetchAnalysis(track.id, 20000)
+      }
+      if (analysis && token === this.streamToken) {
+        // Without a room to follow, carry on from where the stream had got to.
+        const from = this.musicMs() ?? elapsedMs + performance.now() - askedAt
+        const at = performance.now()
+        this.playKept(track.id, analysis, this.roomAnchor !== null ? position : () => from + performance.now() - at)
+      }
+    })()
+  }
+
+  private kept = false
+  private streamToken = 0
+
+  private playKept(id: string, analysis: Analysis, position: () => number) {
+    this.analysis = analysis
+    this.kept = true
+    this.streamStart = 0
+    this.lastBeatIndex = -1
+    this.lastMusicMs = -1
+    this.music.loop = false
+    this.music.src = `/music/${id}/file`
+    this.music.addEventListener(
+      'loadedmetadata',
+      () => {
+        this.music.currentTime = Math.max(0, position() / 1000)
+        this.streamStartGuessed = true
+        this.loadedAt = performance.now()
+        void this.music.play().catch(() => {})
+      },
+      { once: true },
+    )
+  }
+
+  private async fetchAnalysis(id: string, timeout: number) {
+    try {
+      const response = await fetch(`/api/analysis/${id}`, { signal: AbortSignal.timeout(timeout) })
+      return response.ok ? ((await response.json()) as Analysis) : null
+    } catch {
+      return null
+    }
+  }
+
+  /** Milliseconds into the room's song, as heard, or null if it isn't playing. */
+  musicMs() {
+    if (!this.context || this.music.paused || !this.streamStartGuessed) return null
+    const latency = (this.context.outputLatency || this.context.baseLatency || 0) * 1000
+    return this.streamStart + this.music.currentTime * 1000 - latency
+  }
+
+  /** How intense this part of the song is, 0 to 1 (0.5 if unknown). */
+  energy() {
+    const ms = this.musicMs()
+    return this.analysis && ms !== null ? (sectionAt(this.analysis, ms)?.energy ?? 0.5) : 0.5
+  }
+
+  /**
+   * Once a frame: keep to the room's timeline, fire beat and
+   * drop callbacks, and return how hard to pulse the visuals, 0 to 1.
+   */
   beat() {
+    const ms = this.musicMs()
+    const analysis = this.analysis
+    if (!analysis || ms === null) return this.reactiveBeat()
+
+    this.follow(ms)
+    const index = beatIndex(analysis, ms)
+    if (index !== this.lastBeatIndex && index >= 0 && this.lastBeatIndex >= 0 && index === this.lastBeatIndex + 1) this.onBeat(index, isDownbeat(analysis, index))
+    if (this.lastMusicMs >= 0 && ms > this.lastMusicMs && ms - this.lastMusicMs < 500) {
+      if (analysis.drops.some((drop) => drop > this.lastMusicMs && drop <= ms)) this.onDrop()
+    }
+    this.lastBeatIndex = index
+    this.lastMusicMs = ms
+    if (index < 0) return 0
+
+    // A sharp pulse on every beat, harder on the downbeat, scaled by the section.
+    const since = ms - analysis.beats[index]!
+    const strength = isDownbeat(analysis, index) ? 1 : 0.6
+    return Math.exp(-since / 110) * strength * (0.45 + 0.55 * this.energy())
+  }
+
+  /**
+   * Keep to the room's timeline. The stream arrives a few seconds behind it
+   * (the song has to be found, cut, encoded, sent and buffered), by a
+   * different amount for each player, so moments the server times to the music
+   * would miss the beat. The server's own copy of a song seeks anywhere, so
+   * skip by the difference; a live stream only within what it has buffered.
+   * Checked again every few seconds.
+   */
+  private follow(ms: number) {
+    const now = performance.now()
+    if (this.roomAnchor === null || !this.kept || now - this.loadedAt < 1500 || now - this.lastSyncAt < 3000) return
+    this.lastSyncAt = now
+    const drift = now - this.roomAnchor - ms
+    if (Math.abs(drift) < 40) return
+    const target = this.music.currentTime + drift / 1000
+    const { buffered } = this.music
+    // The kept file seeks anywhere; a live stream only within what's buffered.
+    const seekable = this.kept || Array.from({ length: buffered.length }, (_, i) => [buffered.start(i), buffered.end(i) - 0.5]).some(([lo, hi]) => target >= lo! && target <= hi!)
+    if (!seekable || target < 0) return
+    this.music.currentTime = target
+    this.lastBeatIndex = -1
+    this.lastMusicMs = -1
+  }
+
+  /** Without an analysis: bass energy of the music, 0 to 1. */
+  private reactiveBeat() {
     if (!this.analyser || (this.music.paused && !this.introPlaying)) return (this.smoothedBeat *= 0.9)
     this.analyser.getByteFrequencyData(this.spectrum)
     let sum = 0
@@ -174,6 +344,41 @@ export class Sound {
     const level = Math.max(0, sum / 7 / 255 - 0.45) / 0.55
     this.smoothedBeat = Math.max(level, this.smoothedBeat * 0.85)
     return this.smoothedBeat
+  }
+
+  /** Seconds from now until a point in the song, or null if that can't be known. */
+  untilMusic(ms: number) {
+    const now = this.musicMs()
+    return now === null ? null : (ms - now) / 1000
+  }
+
+  /** Cut the song dead, as a round ends. */
+  cutSong() {
+    if (!this.songGate) return
+    const at = this.context!.currentTime
+    this.songGate.gain.cancelScheduledValues(at)
+    this.songGate.gain.setTargetAtTime(0, at, 0.008)
+  }
+
+  /** Bring the song back in, muffled, `delay` seconds from now, while waiting to play. */
+  muffleSong(delay = 0, seconds = 0.6) {
+    if (!this.songGate) return
+    const at = this.context!.currentTime + Math.max(0, delay)
+    this.songGate.gain.cancelScheduledValues(at)
+    this.songGate.gain.setTargetAtTime(0.6, at, seconds / 3)
+    this.songFilter.frequency.cancelScheduledValues(at)
+    this.songFilter.frequency.setTargetAtTime(450, at, seconds / 4)
+  }
+
+  /** Open the song up fully, `delay` seconds from now: the moment play starts. */
+  openSong(delay = 0) {
+    if (!this.songGate) return
+    const at = this.context!.currentTime + Math.max(0, delay)
+    this.songGate.gain.cancelScheduledValues(at)
+    this.songGate.gain.setTargetAtTime(1, at, 0.01)
+    this.songFilter.frequency.cancelScheduledValues(at)
+    this.songFilter.frequency.setValueAtTime(this.songFilter.frequency.value, at)
+    this.songFilter.frequency.exponentialRampToValueAtTime(20000, at + 0.08)
   }
 
   /** A click for a press. Creators chirp upward with the bar; destroyers crunch. */
@@ -278,10 +483,11 @@ export class Sound {
     this.tone('sine', 110, 55, delay, 0.18, 0.25)
   }
 
-  /** The round starts: a bright chord over a kick. */
-  go() {
-    for (const ratio of [1, 1.25, 1.5]) this.tone('square', 880 * ratio, 880 * ratio, 0, 0.35, 0.05)
-    this.tone('sine', 160, 40, 0, 0.3, 0.5)
+  /** The round starts: a bright chord over a kick, `delay` seconds from now. */
+  go(delay = 0) {
+    for (const ratio of [1, 1.25, 1.5]) this.tone('square', 880 * ratio, 880 * ratio, delay, 0.35, 0.05)
+    this.tone('sine', 160, 40, delay, 0.3, 0.5)
+    this.whoosh(300, 6000, 0.35, 0.3, Math.max(0, delay - 0.35))
   }
 
   /** Every tenth press in a streak: an arpeggio that climbs with the streak. */

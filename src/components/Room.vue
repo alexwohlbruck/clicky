@@ -31,7 +31,7 @@ let raf = 0
 function tick() {
   const now = performance.now()
   percent.value = Math.round(display.progress * 100)
-  countdown.value = Math.max(0, Math.ceil((state.countdownEndsAt - now) / 1000))
+  countdown.value = Math.min(3, Math.max(0, Math.ceil((state.countdownEndsAt - now) / state.tickMs)))
   pps.value = state.myRecent.filter((at) => now - at < 1000).length
   frenzyLeft.value = Math.max(0, (state.frenzyUntil - now) / 1000)
   surging.value = !!state.surge && state.surge.until > now
