@@ -1070,6 +1070,44 @@ button {
   }
 }
 
+/* Chips that pop off the bar's tip with each of your own presses. */
+#chips {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.chip-pop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  padding: 5px 10px 4px;
+  border-radius: 999px;
+  background: white;
+  font: bold 1.05rem/1 var(--display);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.35);
+  will-change: transform, opacity;
+}
+.chip-pop.creators {
+  color: var(--blue);
+}
+.chip-pop.destroyers {
+  color: var(--charcoal);
+}
+.chip-pop.big {
+  padding: 6px 12px 5px;
+  background: linear-gradient(135deg, #ffd54f, #ff8f00);
+  color: #000;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+}
+body[data-flashing] #chips {
+  visibility: hidden;
+}
+
 /* Rosters and the title tab along the bottom. */
 .players {
   position: absolute;

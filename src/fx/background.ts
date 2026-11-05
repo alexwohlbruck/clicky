@@ -5,6 +5,7 @@ import {
   exp,
   float,
   floor,
+  fract,
   hash,
   max,
   mix,
@@ -59,6 +60,8 @@ export function backgroundUniforms() {
     orb: uniform(new Vector2(0.5, 0)),
     /** Menus: the halves sink back so the panels on top read cleanly. */
     menu: uniform(0),
+    /** Your last press: where along the bar (0 to 1), seconds since, 1 for creators, streak heat. */
+    mine: uniform(new Vector4(0.5, 99, 1, 0)),
   }
 }
 
@@ -136,12 +139,33 @@ export function backgroundNode(u: BackgroundUniforms) {
 
     const scene = mix(half, band, inBand).toVar()
 
+
     // The tip burns brightly enough to bloom.
     const tipGlow = exp(abs(p.x.sub(tipX)).div(u.chaos.mul(14).add(5)).negate()).mul(
       exp(max(abs(p.y.sub(barMid)).sub(track.w.mul(0.5)), 0).div(10).negate()),
     )
     scene.addAssign(vec3(1.4, 0.5, 0.8).mul(tipGlow).mul(u.pulseCreators.add(u.pulseDestroyers).mul(1.5).add(0.6)))
     scene.addAssign(white.mul(ring.mul(0.35)))
+
+    // Your presses. The bar is a hundred segments: the dividers around your
+    // last press show for a moment (wider on a streak), a notch in your
+    // team's colour marks where it landed, and a ripple runs out from it.
+    const inTrack = inside(p, track)
+    const segment = u.bar.z.div(100)
+    const toDivider = abs(fract(p.x.sub(u.bar.x).div(segment).add(0.5)).sub(0.5)).mul(segment)
+    const pressX = u.bar.x.add(u.bar.z.mul(u.mine.x))
+    const fromPress = abs(p.x.sub(pressX))
+    const fresh = exp(u.mine.y.mul(-2.5))
+    const nearPress = exp(fromPress.div(u.mine.w.mul(220).add(45)).pow(2).negate())
+    // Too fine to read on a narrow screen, so only where segments are wide enough.
+    const divider = smoothstep(1.5, 0.5, toDivider).mul(inTrack).mul(smoothstep(4, 7, segment))
+    scene.assign(mix(scene, scene.mul(0.6), divider.mul(nearPress).mul(fresh.mul(0.7).add(u.mine.w.mul(0.5)).min(1))))
+    const teamColor = mix(dark, blue, u.mine.z)
+    const nearBand = step(u.bar.y.sub(16), p.y).mul(step(p.y, u.bar.y.add(u.bar.w).add(16)))
+    const notch = smoothstep(4, 2, fromPress).mul(nearBand).mul(fresh)
+    scene.assign(mix(scene, teamColor, notch))
+    const ripple = exp(fromPress.sub(u.mine.y.mul(800)).div(16).pow(2).negate()).mul(exp(u.mine.y.mul(-6))).mul(inTrack)
+    scene.assign(mix(scene, teamColor.mul(1.5), ripple.mul(0.6)))
 
     // The surge orb: a gold core with a halo that throbs.
     const orbCenter = vec2(u.bar.x.add(u.bar.z.mul(u.orb.x)), barMid)

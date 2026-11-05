@@ -4,6 +4,7 @@ import { EMOJI, type BotLevel, type Team } from '../../shared/protocol'
 import { display, sound } from '../game/effects'
 import { actions, state } from '../game/store'
 import Icon from './Icon.vue'
+import { haptics } from '../haptics'
 
 const room = computed(() => state.room!)
 /** Spectators get a stand-in so the layout can read a team; nothing they do is sent. */
@@ -43,6 +44,13 @@ const muted = ref(sound.muted)
 function toggleMute() {
   sound.muted = !sound.muted
   muted.value = sound.muted
+}
+
+const canBuzz = touch && haptics.supported
+const buzzing = ref(haptics.enabled)
+function toggleHaptics() {
+  haptics.enabled = !haptics.enabled
+  buzzing.value = haptics.enabled
 }
 
 const copied = ref(false)
@@ -204,6 +212,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
           <p class="sub">{{ state.track.artist }}</p>
         </div>
         <div class="np-buttons">
+          <button v-if="canBuzz" class="round-btn" :aria-label="buzzing ? 'Turn off vibration' : 'Turn on vibration'" @click="toggleHaptics"><Icon :name="buzzing ? 'vibrate' : 'still'" :size="18" /></button>
           <button class="round-btn" :aria-label="muted ? 'Unmute' : 'Mute'" @click="toggleMute"><Icon :name="muted ? 'mute' : 'volume'" :size="18" /></button>
           <button class="round-btn" aria-label="Skip track" @click="actions.skip()"><Icon name="skip" :size="18" /></button>
         </div>

@@ -3,6 +3,7 @@ import { Sound } from '../audio'
 import { Flash, GAME_OVER, INTRO, ROUND_OVER, introIntensity, type FlashEvent, type Frames } from '../flash'
 import { Kind } from '../fx/particles'
 import { Stage } from '../fx/stage'
+import { haptics } from '../haptics'
 import { hooks, state } from './store'
 
 /**
@@ -26,6 +27,10 @@ let shockOrigin = { x: 0, y: 0 }
 let frenzy = 0
 let intensity = 1
 let orbShown = 0
+/** Your last press: where on the bar (0 to 1), when, and how long the streak is. */
+let myPress = { at: 0.5, time: -Infinity, team: 'creators' as Team, streak: 0 }
+let wasOnFire = false
+let nextHeartbeat = 0
 
 let flash: { player: Flash; clock: () => number } | null = null
 let introStarted = false
@@ -85,10 +90,57 @@ hooks.press = (team: Team, mine: boolean) => {
   } else {
     emit({ x, y, count: (mine ? 30 : 12) * boost, kind: Kind.Debris, speed: 620 * boost, angle: Math.PI * 1.35, spread: Math.PI * 1.1, height: 40, life: 1.4, size: 11 })
   }
-  if (mine) {
-    sound.press(team, shown, true)
-    navigator.vibrate?.(8)
+  if (mine) mark(team)
+}
+
+/** Your own press: a sound, a tap, a chip off the tip, and a notch in the bar. */
+function mark(team: Team) {
+  const now = performance.now()
+  const streak = now - myPress.time < 450 ? myPress.streak + 1 : 1
+  // Where the bar is headed, not where it's drawn: the drawing eases after it.
+  const at = target()
+  myPress = { at, time: now, team, streak }
+  const milestone = streak % 10 === 0
+
+  sound.press(team, shown, true)
+  haptics.press(milestone)
+  if (milestone) sound.combo(streak / 10)
+  const fire = onFire()
+  if (fire && !wasOnFire) sound.onFire()
+  wasOnFire = fire
+
+  const x = barRect.x + barRect.w * at
+  const sign = team === 'creators' ? '+' : '−'
+  pop(x, barRect.y, milestone ? `${streak} combo` : `${sign}1`, team, milestone)
+}
+
+// A small pool of chips, recycled, so mashing never creates DOM nodes.
+const chips: HTMLElement[] = []
+let nextChip = 0
+function pop(x: number, y: number, text: string, team: Team, big: boolean) {
+  const layer = $('chips')
+  if (!layer) return
+  if (chips.length < 24) {
+    const el = document.createElement('span')
+    layer.append(el)
+    chips.push(el)
   }
+  const el = chips[nextChip++ % chips.length]!
+  el.textContent = text
+  el.className = `chip-pop ${team}${big ? ' big' : ''}`
+  // A little sideways scatter so a mash fans out instead of stacking.
+  const from = x + (Math.random() - 0.5) * 30
+  const to = from + (Math.random() - 0.5) * 60
+  const at = (dx: number, dy: number, scale: number) => `translate(${dx}px, ${y + dy}px) translate(-50%, -100%) scale(${scale})`
+  el.getAnimations().forEach((a) => a.cancel())
+  el.animate(
+    [
+      { transform: at(from, 12, 0.4), opacity: 0 },
+      { transform: at(from, -6, 1.1), opacity: 1, offset: 0.15 },
+      { transform: at(to, big ? -90 : -64, 0.9), opacity: 0 },
+    ],
+    { duration: big ? 1100 : 700, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)', fill: 'forwards' },
+  )
 }
 
 hooks.roundOver = (winner, gameOver) => {
@@ -103,6 +155,8 @@ hooks.roundOver = (winner, gameOver) => {
   }
   emit({ x, y, count: 500, kind: Kind.Spark, speed: 1600, life: 1.1, size: 12 })
   sound.roundOver(winner === state.me?.team)
+  if (state.me) (winner === state.me.team ? haptics.won : haptics.lost)()
+  myPress.streak = 0
 
   const started = performance.now()
   playFlash(gameOver ? GAME_OVER : ROUND_OVER, gameOver ? `${winner} win` : `Point to ${winner}`, onRoundEvent, () => performance.now() - started, () => {})
@@ -112,11 +166,15 @@ hooks.countdown = () => {
   trauma = 0.4
   shock(innerWidth / 2, innerHeight / 2, 0.6)
   // 3, 2, 1 a second apart; GO is played when the round starts.
-  for (let i = 0; i < 3; i++) sound.blip(440, 0.15, i)
+  for (let i = 0; i < 3; i++) {
+    sound.countdownTick(i, i)
+    setTimeout(haptics.tick, i * 1000)
+  }
 }
 
 hooks.go = () => {
-  sound.blip(880, 0.4)
+  sound.go()
+  haptics.go()
   const { x, y } = tip()
   shock(x, y, 1)
   trauma = 0.8
@@ -125,6 +183,8 @@ hooks.go = () => {
 
 hooks.frenzy = (active) => {
   if (!active) return
+  sound.frenzy()
+  haptics.frenzy()
   shock(innerWidth / 2, innerHeight / 2, 1.3)
   trauma = 1
   spike = 1
@@ -140,7 +200,13 @@ hooks.surge = (team, at) => {
   emit({ x, y, count: 350, kind: Kind.Spark, speed: 1500, life: 1, size: 12 })
   emit({ x, y, count: 120, kind: team === 'creators' ? Kind.ConfettiCreators : Kind.ConfettiDestroyers, speed: 900, angle: -Math.PI / 2, spread: 2.4, life: 1.8, size: 11 })
   sound.coin()
+  if (team === state.me?.team) haptics.surge()
 }
+
+hooks.orb = () => sound.shimmer()
+hooks.react = () => sound.pop()
+hooks.chat = () => sound.chatTick()
+hooks.roster = (joined) => sound.roster(joined)
 
 hooks.track = (track, elapsedMs) => sound.playTrack(track, elapsedMs)
 
@@ -253,7 +319,15 @@ let last = performance.now()
 let menu = 0
 let lastSplit = ''
 
-/** The bar as drawn: eases toward the server's count plus our unconfirmed presses. */
+/** Where the bar is headed: the server's count plus our presses it hasn't confirmed yet. */
+function target() {
+  const { room, me } = state
+  if (!playing() || !room) return START / MAX
+  const optimistic = me && room.phase === 'playing' ? state.unconfirmed * (me.team === 'creators' ? 1 : -1) : 0
+  return Math.min(MAX, Math.max(0, room.count + optimistic)) / MAX
+}
+
+/** The bar as drawn: eases toward the target. */
 export const display = { progress: 0.5 }
 
 function frame(now: number) {
@@ -266,12 +340,7 @@ function frame(now: number) {
   if (flash) flash.player.update(flash.clock())
 
   const inGame = playing()
-  let target = START / MAX
-  if (inGame && state.room) {
-    const optimistic = state.me && state.room.phase === 'playing' ? state.unconfirmed * (state.me.team === 'creators' ? 1 : -1) : 0
-    target = Math.min(MAX, Math.max(0, state.room.count + optimistic)) / MAX
-  }
-  shown += (target - shown) * (1 - Math.exp(-dt * 22))
+  shown += (target() - shown) * (1 - Math.exp(-dt * 22))
   display.progress = shown
 
   const decay = Math.exp(-dt * 7)
@@ -280,6 +349,15 @@ function frame(now: number) {
   spike *= Math.exp(-dt * 5)
   pressRate *= Math.exp(-dt * 1.5)
   frenzy += ((state.frenzyUntil > now ? 1 : 0) - frenzy) * (1 - Math.exp(-dt * 6))
+
+  // Your side close to losing: a heartbeat you hear and feel, quicker as it gets worse.
+  const me = state.me
+  const myDanger = inGame && me && state.room?.phase === 'playing' ? (me.team === 'creators' ? smoothstep(0.25, 0.05, shown) : smoothstep(0.75, 0.95, shown)) : 0
+  if (myDanger > 0.05 && now > nextHeartbeat) {
+    sound.heartbeat(myDanger)
+    haptics.heartbeat()
+    nextHeartbeat = now + 950 - myDanger * 550
+  }
 
   const edge = inGame ? Math.max(smoothstep(0.7, 0.96, shown), smoothstep(0.3, 0.04, shown)) : 0
   const chaos = Math.min(1, Math.max(spike, smoothstep(2, 22, pressRate) * 0.75 + edge * 0.45 + trauma * 0.3 + frenzy * 0.3))
@@ -315,6 +393,9 @@ function frame(now: number) {
     u.strobe.value = flash?.player.dark ? 1 : 0
     stage.fringe.value = (0.0005 + chaos * 0.005 + trauma * 0.006) * intensity
     u.grain.value = intensity
+    // Your presses, for the bar: where, how long ago, which side, how hot the streak is.
+    const sinceMine = (now - myPress.time) / 1000
+    u.mine.value.set(myPress.at, inGame ? sinceMine : 99, myPress.team === 'creators' ? 1 : 0, Math.min(1, myPress.streak / 40) * Math.exp(-Math.max(0, sinceMine - 0.4) * 3))
     menu += ((state.screen === 'intro' || inGame ? 0 : 1) - menu) * (1 - Math.exp(-dt * 5))
     u.menu.value = menu
 

@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import Home from './components/Home.vue'
 import Room from './components/Room.vue'
-import { introGesture, startEffects } from './game/effects'
+import { introGesture, sound, startEffects } from './game/effects'
 import { EMOJI } from '../shared/protocol'
 import { actions, state } from './game/store'
 
@@ -27,6 +27,7 @@ addEventListener('keydown', (event) => {
 function onPointer(event: PointerEvent) {
   if (introGesture()) return
   const target = event.target as HTMLElement
+  if (target.closest('button:not(:disabled)')) sound.click()
   if (target.closest('button, input, a, select, .card, .reactions')) return
   if (state.screen === 'room' && state.room?.phase === 'playing') {
     event.preventDefault()
@@ -44,6 +45,8 @@ function onPointer(event: PointerEvent) {
       <Home v-if="state.screen === 'home'" />
       <Room v-else-if="state.screen === 'room'" />
     </Transition>
+
+    <div id="chips"></div>
 
     <div id="flash">
       <h1 id="flash-text"></h1>

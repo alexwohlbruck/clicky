@@ -17,6 +17,8 @@ const PATHS = {
   play: 'M7 4.5l13 7.5-13 7.5z',
   plus: 'M12 5v14M5 12h14',
   bolt: 'M13 3L5 13.5h6L10 21l9-11h-6z',
+  vibrate: 'M8 4h8v16H8zM4 8v8M20 8v8',
+  still: 'M8 4h8v16H8zM3 3l18 18',
 } as const
 
 defineProps<{ name: keyof typeof PATHS; size?: number }>()

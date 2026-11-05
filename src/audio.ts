@@ -225,6 +225,111 @@ export class Sound {
     this.blip(1319, 0.3, 0.08)
   }
 
+  /** One oscillator note with a pitch glide and a quick decay. */
+  private tone(type: OscillatorType, from: number, to: number, delay: number, duration: number, level: number) {
+    const context = this.context
+    if (!context) return
+    const at = context.currentTime + delay
+    const osc = context.createOscillator()
+    const gain = context.createGain()
+    osc.type = type
+    osc.frequency.setValueAtTime(from, at)
+    if (to !== from) osc.frequency.exponentialRampToValueAtTime(to, at + duration)
+    gain.gain.setValueAtTime(0.0001, at)
+    gain.gain.linearRampToValueAtTime(level, at + Math.min(0.01, duration / 4))
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
+    osc.connect(gain).connect(this.master)
+    osc.start(at)
+    osc.stop(at + duration + 0.02)
+  }
+
+  /** Filtered noise, swept from one frequency to another. */
+  private whoosh(from: number, to: number, duration: number, level: number, delay = 0) {
+    const context = this.context
+    if (!context) return
+    const at = context.currentTime + delay
+    const source = context.createBufferSource()
+    source.buffer = this.noise
+    source.loop = true
+    const filter = context.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.Q.value = 3
+    filter.frequency.setValueAtTime(from, at)
+    filter.frequency.exponentialRampToValueAtTime(to, at + duration)
+    const gain = context.createGain()
+    gain.gain.setValueAtTime(0.0001, at)
+    gain.gain.linearRampToValueAtTime(level, at + duration * 0.7)
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
+    source.connect(filter).connect(gain).connect(this.master)
+    source.start(at)
+    source.stop(at + duration + 0.02)
+  }
+
+  /** The countdown: three ticks climbing toward the start. */
+  countdownTick(step: number, delay: number) {
+    this.tone('square', 440 + step * 110, 440 + step * 110, delay, 0.14, 0.11)
+    this.tone('sine', 110, 55, delay, 0.18, 0.25)
+  }
+
+  /** The round starts: a bright chord over a kick. */
+  go() {
+    for (const ratio of [1, 1.25, 1.5]) this.tone('square', 880 * ratio, 880 * ratio, 0, 0.35, 0.05)
+    this.tone('sine', 160, 40, 0, 0.3, 0.5)
+  }
+
+  /** Every tenth press in a streak: an arpeggio that climbs with the streak. */
+  combo(level: number) {
+    const base = 523 * 2 ** (Math.min(level - 1, 8) / 12)
+    ;[1, 1.26, 1.5, 2].forEach((ratio, i) => this.tone('square', base * ratio, base * ratio, i * 0.035, 0.09, 0.07))
+  }
+
+  /** Crossing ten presses a second. */
+  onFire() {
+    this.whoosh(300, 4000, 0.45, 0.35)
+    this.tone('sawtooth', 220, 880, 0.05, 0.4, 0.05)
+  }
+
+  /** Your side is about to lose: a low double thump, louder the closer it is. */
+  heartbeat(danger: number) {
+    const level = 0.25 + danger * 0.35
+    this.tone('sine', 90, 45, 0, 0.16, level)
+    this.tone('sine', 80, 40, 0.14, 0.14, level * 0.7)
+  }
+
+  /** Double time: a rising sweep, then a stab. */
+  frenzy() {
+    this.whoosh(200, 6000, 0.7, 0.4)
+    for (const ratio of [1, 1.5, 2]) this.tone('sawtooth', 330 * ratio, 330 * ratio, 0.65, 0.4, 0.05)
+  }
+
+  /** A surge orb appears on the bar. */
+  shimmer() {
+    ;[1568, 2093, 2637, 3136].forEach((f, i) => this.tone('sine', f, f, i * 0.05, 0.25, 0.05))
+  }
+
+  /** Someone reacts. */
+  pop() {
+    this.tone('sine', 600 + Math.random() * 300, 1400, 0, 0.07, 0.12)
+  }
+
+  /** A chat message arrives. */
+  chatTick() {
+    this.tone('triangle', 1760, 1760, 0, 0.06, 0.08)
+    this.tone('triangle', 2349, 2349, 0.05, 0.08, 0.06)
+  }
+
+  /** Someone joins (up) or leaves (down) the lobby. */
+  roster(joined: boolean) {
+    const [a, b] = joined ? [659, 988] : [988, 659]
+    this.tone('triangle', a, a, 0, 0.09, 0.09)
+    this.tone('triangle', b, b, 0.08, 0.12, 0.09)
+  }
+
+  /** A soft tick for buttons. */
+  click() {
+    this.tone('triangle', 1200, 900, 0, 0.03, 0.05)
+  }
+
   /** The original's Tong voice for a loss, and a rising stab for a win. */
   roundOver(won: boolean) {
     const context = this.context
@@ -242,6 +347,7 @@ export class Sound {
     }
 
     const now = context.currentTime
+    this.whoosh(400, 5000, 0.5, 0.25)
     for (const [i, ratio] of [1, 1.25, 1.5, 2].entries()) {
       const osc = context.createOscillator()
       const gain = context.createGain()

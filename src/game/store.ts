@@ -80,6 +80,10 @@ export const hooks = {
   frenzy: (_active: boolean) => {},
   track: (_track: Track, _elapsedMs: number) => {},
   surge: (_team: Team, _at: number) => {},
+  orb: () => {},
+  react: () => {},
+  chat: () => {},
+  roster: (_joined: boolean) => {},
 }
 
 let unlockTimer = 0
@@ -200,10 +204,15 @@ function receive(message: ServerMessage) {
       history.replaceState(null, '', `?${message.you ? 'room' : 'watch'}=${message.room.id}`)
       break
 
-    case 'room':
+    case 'room': {
+      // Real people coming and going, not the bot being switched on.
+      const humans = (room: RoomSnapshot | null) => room?.players.filter((p) => !p.bot).length ?? 0
+      const before = humans(state.room)
+      if (state.room?.id === message.room.id && humans(message.room) !== before) hooks.roster(humans(message.room) > before)
       state.room = message.room
       if (state.me) state.me = message.room.players.find((p) => p.id === state.me!.id) ?? state.me
       break
+    }
 
     case 'state': {
       const { room, me } = state
@@ -273,6 +282,7 @@ function receive(message: ServerMessage) {
     case 'react': {
       const player = state.room?.players.find((p) => p.id === message.id)
       float(message.emoji, player?.team ?? 'creators')
+      hooks.react()
       break
     }
 
@@ -284,11 +294,13 @@ function receive(message: ServerMessage) {
 
     case 'chat':
       state.chat = [...state.chat.slice(-49), message.message]
+      if (message.message.id !== state.me?.id) hooks.chat()
       break
 
     case 'orb': {
       const at = state.orb
       state.orb = message.at
+      if (message.at !== null && at === null) hooks.orb()
       if (message.by && at !== null) {
         state.surge = { team: message.by, until: performance.now() + 1600 }
         if (message.by === state.me?.team) unlock(['surge'])
