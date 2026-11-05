@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { EMOJI, type BotLevel, type Team } from '../../shared/protocol'
+import { EMOJI, TEAM_NAME, TEAM_VERB, type BotLevel, type Team } from '../../shared/protocol'
 import { display, sound } from '../game/effects'
 import { actions, state } from '../game/store'
 import Icon from './Icon.vue'
@@ -17,8 +17,8 @@ const touch = matchMedia('(pointer: coarse)').matches
 
 const teamPlayers = (team: Team) => room.value.players.filter((p) => p.team === team)
 const teams: { team: Team; label: string; verb: string }[] = [
-  { team: 'destroyers', label: 'Destroyers', verb: 'destroy' },
-  { team: 'creators', label: 'Creators', verb: 'create' },
+  { team: 'destroyers', label: 'Destroyers', verb: TEAM_VERB.destroyers },
+  { team: 'creators', label: 'Builders', verb: TEAM_VERB.creators },
 ]
 
 // Values that change every frame, read from the effects loop.
@@ -219,7 +219,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
       </div>
 
       <div class="middle">
-        <h2 class="call" :style="{ visibility: spectating ? 'hidden' : undefined }">{{ me.team === 'creators' ? 'create' : 'destroy' }}</h2>
+        <h2 class="call" :style="{ visibility: spectating ? 'hidden' : undefined }">{{ TEAM_VERB[me.team] }}</h2>
         <div id="bar"></div>
         <h1 class="percent">{{ percent }}%</h1>
       </div>
@@ -227,7 +227,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
       <div class="scores">
         <div class="score destroyers"><span>Destroyers</span><strong>{{ room.score.destroyers }}</strong></div>
         <span class="target">First to {{ room.settings.roundsToWin }}</span>
-        <div class="score creators"><strong>{{ room.score.creators }}</strong><span>Creators</span></div>
+        <div class="score creators"><strong>{{ room.score.creators }}</strong><span>Builders</span></div>
       </div>
 
       <Transition name="pop">
@@ -244,7 +244,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
       <Transition name="pop">
         <div v-if="surging && state.surge" class="banner surge" :class="state.surge.team">
           <strong>Surge!</strong>
-          <span>+6 to the {{ state.surge.team }}</span>
+          <span>+6 to the {{ TEAM_NAME[state.surge.team] }}</span>
         </div>
       </Transition>
 
@@ -277,7 +277,7 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
       <div v-if="state.showResults && results" class="results-backdrop">
         <section class="card results">
           <p class="label">Game over</p>
-          <h1 :class="results.winner">{{ results.winner }} win</h1>
+          <h1 :class="results.winner">{{ TEAM_NAME[results.winner] }} win</h1>
           <p class="final">
             <span class="destroyers">{{ results.score.destroyers }}</span>
             <span class="dash">–</span>

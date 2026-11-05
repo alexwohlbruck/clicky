@@ -2,6 +2,11 @@ export type Team = 'creators' | 'destroyers'
 
 export const TEAMS: readonly Team[] = ['creators', 'destroyers']
 
+/** What players see. The creators were renamed the builders; the id stayed. */
+export const TEAM_NAME: Record<Team, string> = { creators: 'builders', destroyers: 'destroyers' }
+/** What each side does to the bar. */
+export const TEAM_VERB: Record<Team, string> = { creators: 'build', destroyers: 'destroy' }
+
 /** Segments in the bar. Creators win at `MAX - 1`, destroyers at 1. */
 export const MAX = 100
 export const START = MAX / 2

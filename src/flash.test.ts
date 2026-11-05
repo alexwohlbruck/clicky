@@ -59,7 +59,7 @@ test('the letters type out with no effects, and the intensity only climbs from t
 
 test('the sound cues match what the flash player does', () => {
   for (const [frames, text] of [
-    [ROUND_OVER, 'Point to creators'],
+    [ROUND_OVER, 'Point to builders'],
     [GAME_OVER, 'destroyers win'],
   ] as [Frames, string][]) {
     const letters: number[] = []

@@ -1,5 +1,5 @@
 import { nextBeat } from '../../shared/music'
-import { MAX, START, type Team } from '../../shared/protocol'
+import { MAX, START, TEAM_NAME, type Team } from '../../shared/protocol'
 import { Sound } from '../audio'
 import { Flash, GAME_OVER, INTRO, ROUND_OVER, cues, introIntensity, type FlashEvent, type Frames } from '../flash'
 import { Kind } from '../fx/particles'
@@ -161,7 +161,7 @@ hooks.roundOver = (winner, gameOver) => {
   myPress.streak = 0
 
   const frames = gameOver ? GAME_OVER : ROUND_OVER
-  const text = gameOver ? `${winner} win` : `Point to ${winner}`
+  const text = gameOver ? `${TEAM_NAME[winner]} win` : `Point to ${TEAM_NAME[winner]}`
   // The score is scheduled up front against the same timeline the flash plays.
   sound.score(cues(frames, text), !state.me ? 'neutral' : winner === state.me.team ? 'won' : 'lost', gameOver)
   // The song cuts dead on the hit. After a round it comes back muffled once

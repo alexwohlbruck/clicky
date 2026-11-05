@@ -6,22 +6,38 @@
   font-display: block;
 }
 
+/* Departure Mono (Helena Zhang and Tobias Fried, MIT). Drawn on an 11 px grid,
+   so sizes here are multiples of 5.5 px: crisp at 2x and 3x pixel density. */
+@font-face {
+  font-family: 'Departure Mono';
+  src: url('/fonts/DepartureMono.woff2') format('woff2');
+  font-display: block;
+}
+
 :root {
   --charcoal: #37474f;
   --blue: #0091ea;
   --dark: #1f282d;
   --pink: #e91e63;
 
-  --surface: rgb(15 20 23 / 0.86);
+  --surface: rgb(12 16 19 / 0.9);
   --raised: rgb(255 255 255 / 0.05);
-  --line: rgb(255 255 255 / 0.08);
+  --line: rgb(255 255 255 / 0.1);
   --text-2: rgb(255 255 255 / 0.66);
   --text-3: rgb(255 255 255 / 0.42);
   --creators-ink: #4fc3ff;
   --destroyers-ink: #b0bec5;
 
-  --display: Governor, 'Product Sans', Arial, sans-serif;
-  --ui: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* The game's type: one pixel monospace. Governor is only the logo. */
+  --display: 'Departure Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --ui: var(--display);
+  --logo: Governor, 'Product Sans', Arial, sans-serif;
+  --t-s: 11px;
+  --t-m: 16.5px;
+  --t-l: 22px;
+  --t-xl: 33px;
+  --yellow: #ffd23f;
+  --edge: 4px;
 
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
@@ -36,6 +52,8 @@
 * {
   box-sizing: border-box;
   margin: 0;
+  /* There's only the one weight; a faked bold smears the pixels. */
+  font-synthesis: none;
 }
 
 html,
@@ -46,7 +64,7 @@ body,
   overflow: hidden;
   overscroll-behavior: none;
   font-family: var(--ui);
-  font-size: 16px;
+  font-size: 16.5px;
   color: white;
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
@@ -118,12 +136,13 @@ button {
 
 /* --- Building blocks -------------------------------------------------- */
 
+/* Square corners and hard shadows: a screen drawn in pixels. */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.45);
+  border-radius: var(--edge);
+  padding: 20px;
+  box-shadow: 6px 6px 0 rgb(0 0 0 / 0.35);
 }
 
 .card-head {
@@ -131,31 +150,40 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 30px;
-  margin-bottom: 12px;
+  min-height: 33px;
+  margin-bottom: 14px;
 }
 .card-head.sub {
-  margin: 18px 0 10px;
+  margin: 22px 0 11px;
   min-height: 0;
 }
 
+/* Section names: capitals, with a pink pixel in front. */
 .label {
-  font: 600 0.72rem/1.2 var(--ui);
-  letter-spacing: 0.1em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--t-s)/1.2 var(--ui);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-2);
 }
+.card-head .label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--pink);
+}
 
 .count {
-  font: 600 0.78rem var(--ui);
+  font: var(--t-s) var(--ui);
   color: var(--text-3);
-  font-variant-numeric: tabular-nums;
 }
 
 .empty,
 .nobody {
   color: var(--text-3);
-  font-size: 0.9rem;
+  font-size: var(--t-m);
   line-height: 1.5;
 }
 
@@ -168,32 +196,35 @@ button {
   height: 44px;
   padding: 0 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgb(255 255 255 / 0.07);
+  border-radius: var(--edge);
+  background: rgb(255 255 255 / 0.06);
   color: white;
-  font: 600 0.95rem var(--ui);
+  font: var(--t-m) var(--ui);
+  letter-spacing: 0.02em;
   white-space: nowrap;
   cursor: pointer;
+  box-shadow: 0 3px 0 rgb(0 0 0 / 0.45);
   transition:
-    background-color 0.15s,
-    transform 0.1s,
-    opacity 0.15s;
+    background-color 0.12s,
+    transform 0.06s,
+    box-shadow 0.06s;
 }
 .btn:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.13);
+  background: rgb(255 255 255 / 0.12);
 }
+/* Pressed: the button sinks into its shadow. */
 .btn:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: translateY(3px);
+  box-shadow: 0 0 0 rgb(0 0 0 / 0.45);
 }
 .btn:disabled {
   opacity: 0.35;
   cursor: default;
 }
 .btn.small {
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 10px;
-  font-size: 0.85rem;
+  height: 33px;
+  padding: 0 11px;
+  font-size: var(--t-s);
 }
 .btn.icon-btn {
   width: 44px;
@@ -201,10 +232,11 @@ button {
   flex-shrink: 0;
 }
 .btn.icon-btn.quiet {
-  width: 34px;
-  height: 34px;
+  width: 33px;
+  height: 33px;
   border-color: transparent;
   background: none;
+  box-shadow: none;
   color: var(--text-2);
 }
 .btn.icon-btn.quiet:hover {
@@ -213,54 +245,62 @@ button {
 .btn.primary {
   background: var(--pink);
   border-color: transparent;
-  box-shadow: 0 8px 24px -6px rgb(233 30 99 / 0.6);
+  box-shadow: 0 4px 0 #8e1040;
 }
 .btn.primary:hover:not(:disabled) {
-  background: #f0306f;
+  background: #f33576;
 }
-/* The one big call to action on a screen, in the game's own type. */
+.btn.primary:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #8e1040;
+}
+/* The one big call to action on a screen. */
 .hero-btn {
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   height: auto;
-  min-height: 64px;
-  padding: 12px 24px;
-  border-radius: 14px;
+  min-height: 66px;
+  padding: 11px 22px;
 }
 .hero-btn span {
-  font: bold 1.45rem/1.1 var(--display);
-  letter-spacing: 0.14em;
+  font: var(--t-l)/1 var(--display);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 .hero-btn small {
-  font: 500 0.8rem var(--ui);
-  opacity: 0.85;
+  font: var(--t-s) var(--ui);
+  opacity: 0.8;
 }
 
+/* Tabs in a tray. */
 .segmented {
   display: inline-flex;
   flex-shrink: 0;
+  gap: 2px;
   padding: 3px;
-  border-radius: 10px;
-  background: rgb(0 0 0 / 0.32);
+  border: 1px solid var(--line);
+  border-radius: var(--edge);
+  background: rgb(0 0 0 / 0.35);
 }
 .segmented button {
-  min-width: 36px;
-  height: 30px;
-  padding: 0 11px;
+  min-width: 33px;
+  height: 27.5px;
+  padding: 0 9px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 2px;
   background: none;
   color: var(--text-2);
-  font: 600 0.82rem var(--ui);
-  text-transform: capitalize;
+  font: var(--t-s) var(--ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
   transition:
-    background-color 0.15s,
-    color 0.15s;
+    background-color 0.12s,
+    color 0.12s;
 }
 .segmented button:hover:not(:disabled):not(.on) {
   color: white;
+  background: rgb(255 255 255 / 0.06);
 }
 .segmented button.on {
   background: white;
@@ -279,41 +319,39 @@ button {
 .field input,
 .code-input,
 .chat input {
-  height: 48px;
+  height: 49.5px;
   min-width: 0;
   padding: 0 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgb(0 0 0 / 0.3);
+  border-radius: var(--edge);
+  background: rgb(0 0 0 / 0.4);
   color: white;
-  font: 600 1.05rem var(--ui);
+  font: var(--t-m) var(--ui);
+  caret-color: var(--pink);
   outline: none;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+  transition: border-color 0.12s;
 }
 .field input::placeholder,
 .code-input::placeholder,
 .chat input::placeholder {
   color: var(--text-3);
-  font-weight: 500;
 }
 .field input:focus,
 .code-input:focus,
 .chat input:focus {
   border-color: var(--pink);
-  box-shadow: 0 0 0 3px rgb(233 30 99 / 0.25);
 }
 
 .chip {
   display: inline-grid;
   place-items: center;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 8px;
+  height: 27.5px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
   background: var(--raised);
-  font: bold 0.95rem var(--display);
-  letter-spacing: 0.14em;
+  font: var(--t-m) var(--display);
+  letter-spacing: 0.1em;
 }
 
 .list {
@@ -324,15 +362,16 @@ button {
   gap: 2px;
 }
 
+/* Square badges with an initial, like a sprite. */
 .avatar {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  width: 27.5px;
+  height: 27.5px;
+  border-radius: 2px;
   background: rgb(255 255 255 / 0.12);
-  font: 700 0.85rem var(--ui);
+  font: var(--t-m) var(--ui);
 }
 .avatar.bot {
   background: rgb(255 255 255 / 0.06);
@@ -356,7 +395,7 @@ button {
   padding: 3vh 0 2vh;
 }
 .wordmark {
-  font: bold clamp(3.4rem, 12vw, 8rem) / 1 var(--display);
+  font: clamp(3.4rem, 12vw, 8rem) / 1 var(--logo);
   letter-spacing: 0.1em;
   /* Letter spacing trails after the last letter; pull it back so it centres. */
   margin-right: -0.1em;
@@ -366,11 +405,19 @@ button {
     calc(var(--split) * -1) 0 rgb(0 230 255 / 0.75);
 }
 .tagline {
-  margin-top: 12px;
-  font: 600 0.78rem var(--ui);
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
+  margin-top: 16px;
+  font: var(--t-m) var(--ui);
+  letter-spacing: 0.06em;
   color: var(--text-2);
+}
+.tagline::before {
+  content: '> ';
+  color: var(--pink);
+}
+/* A terminal's cursor. */
+.tagline::after {
+  content: '_';
+  animation: blink 1.1s steps(2, start) infinite;
 }
 
 .col {
@@ -388,7 +435,7 @@ button {
   align-items: center;
   gap: 12px;
   color: var(--text-3);
-  font-size: 0.8rem;
+  font-size: var(--t-s);
 }
 .divider::before,
 .divider::after {
@@ -413,7 +460,7 @@ button {
   width: 0;
   min-width: 5.5em;
   text-align: center;
-  font: bold 1rem var(--display);
+  font: var(--t-m) var(--display);
   letter-spacing: 0.3em;
   text-transform: uppercase;
 }
@@ -427,13 +474,13 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font: 600 0.78rem var(--ui);
+  font: var(--t-s) var(--ui);
   color: #69f0ae;
 }
 .live i {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: 0;
   background: currentColor;
   animation: breathe 1.6s ease-in-out infinite;
 }
@@ -451,13 +498,11 @@ button {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: var(--t-s);
 }
 .room-meta small {
   color: var(--text-3);
-  font-size: 0.78rem;
-  font-weight: 500;
+  font-size: var(--t-s);
   font-variant-numeric: tabular-nums;
 }
 
@@ -468,23 +513,23 @@ button {
 }
 .stats dl div {
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--edge);
   background: var(--raised);
 }
 .stats dt {
-  font: 600 0.68rem var(--ui);
+  font: var(--t-s) var(--ui);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-3);
 }
 .stats dd {
   margin-top: 2px;
-  font: 700 1.35rem var(--ui);
+  font: var(--t-l) var(--ui);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .stats dd small {
-  font-size: 0.75rem;
+  font-size: var(--t-s);
   color: var(--text-3);
   margin-left: 1px;
 }
@@ -499,9 +544,9 @@ button {
   aspect-ratio: 1;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: var(--edge);
   background: var(--raised);
-  font-size: 1.15rem;
+  font-size: var(--t-m);
   filter: grayscale(1);
   opacity: 0.3;
   cursor: help;
@@ -519,7 +564,7 @@ button {
   gap: 12px;
   height: 42px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: var(--edge);
   font-variant-numeric: tabular-nums;
 }
 .board-row:nth-child(even) {
@@ -534,7 +579,6 @@ button {
 .board-row .rank {
   width: 1.4em;
   color: var(--text-3);
-  font-weight: 700;
 }
 .board-row .name {
   flex: 1;
@@ -542,11 +586,9 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
 }
 .board-row .value {
   color: var(--text-2);
-  font-weight: 600;
 }
 
 /* --- Lobby ------------------------------------------------------------ */
@@ -585,9 +627,9 @@ button {
   gap: 4px;
 }
 .room-id strong {
-  font: bold clamp(2rem, 6vw, 2.6rem) / 1 var(--display);
-  letter-spacing: 0.16em;
-  margin-right: -0.16em;
+  font: 44px/1 var(--display);
+  letter-spacing: 0.12em;
+  margin-right: -0.12em;
   user-select: text;
 }
 
@@ -621,8 +663,8 @@ button {
   justify-content: space-between;
 }
 .team-head h2 {
-  font: bold 1.05rem var(--display);
-  letter-spacing: 0.16em;
+  font: var(--t-m) var(--display);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--team-ink);
 }
@@ -639,7 +681,6 @@ button {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  font-weight: 600;
 }
 .people .avatar {
   background: color-mix(in srgb, var(--team) 45%, transparent);
@@ -660,10 +701,10 @@ button {
 .you {
   flex-shrink: 0;
   padding: 2px 7px;
-  border-radius: 6px;
+  border-radius: var(--edge);
   background: rgb(233 30 99 / 0.2);
   color: #ff8fb4;
-  font: 700 0.65rem var(--ui);
+  font: var(--t-s) var(--ui);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -675,7 +716,7 @@ button {
   width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--edge);
   background: none;
   color: var(--text-3);
   cursor: pointer;
@@ -689,7 +730,7 @@ button {
 }
 .job {
   color: var(--text-2);
-  font-size: 0.85rem;
+  font-size: var(--t-s);
 }
 .job strong {
   color: var(--team-ink);
@@ -713,13 +754,11 @@ button {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--t-m);
 }
 .setting-name small {
   color: var(--text-3);
-  font-size: 0.78rem;
-  font-weight: 500;
+  font-size: var(--t-s);
 }
 
 .chat {
@@ -738,7 +777,7 @@ button {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 12px;
-  font-size: 0.92rem;
+  font-size: var(--t-m);
   line-height: 1.4;
   user-select: text;
   overflow-wrap: anywhere;
@@ -759,8 +798,7 @@ button {
 .chat input {
   flex: 1;
   height: 44px;
-  font-size: 1rem;
-  font-weight: 500;
+  font-size: var(--t-m);
 }
 
 .lobby-cta {
@@ -774,7 +812,6 @@ button {
 .waiting {
   padding: 12px 0;
   color: var(--text-2);
-  font-weight: 600;
   animation: breathe 1.8s ease-in-out infinite;
 }
 .tv-join {
@@ -784,7 +821,7 @@ button {
   gap: 6px;
 }
 .tv-join strong {
-  font-size: 1.4rem;
+  font-size: var(--t-l);
   user-select: text;
 }
 
@@ -810,8 +847,8 @@ button {
   position: absolute;
   top: 18px;
   max-width: calc(50% - 28px);
-  font: bold clamp(0.8rem, 2.4vw, 1rem) / 1.25 var(--display);
-  letter-spacing: 0.08em;
+  font: var(--t-m) / 1.3 var(--display);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .corner.tl {
@@ -822,13 +859,13 @@ button {
   text-align: right;
 }
 .corner .sub {
-  font-size: 0.8em;
-  opacity: 0.62;
+  font-size: var(--t-s);
+  opacity: 0.65;
 }
 .tv-code {
   margin-top: 4px;
-  font-size: 2.4em;
-  letter-spacing: 0.16em;
+  font-size: 44px;
+  letter-spacing: 0.12em;
 }
 .np {
   min-width: 0;
@@ -850,7 +887,7 @@ button {
   width: 38px;
   height: 38px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--edge);
   background: rgb(0 0 0 / 0.22);
   color: white;
   cursor: pointer;
@@ -864,9 +901,9 @@ button {
   align-items: baseline;
   margin-top: 10px;
   padding: 5px 11px;
-  border-radius: 999px;
+  border-radius: var(--edge);
   background: rgb(0 0 0 / 0.25);
-  font: 600 0.78rem var(--ui);
+  font: var(--t-s) var(--ui);
   letter-spacing: 0;
   text-transform: none;
   font-variant-numeric: tabular-nums;
@@ -874,7 +911,7 @@ button {
 }
 .pps strong {
   color: white;
-  font-size: 1rem;
+  font-size: var(--t-m);
   margin-right: 1px;
 }
 .pps .dot {
@@ -904,7 +941,6 @@ button {
 .percent,
 .countdown {
   font-family: var(--display);
-  font-weight: bold;
   line-height: 1;
   text-transform: uppercase;
   text-shadow:
@@ -912,16 +948,15 @@ button {
     calc(var(--split) * -1) 0 rgb(0 230 255 / 0.75);
 }
 .call {
-  font-size: clamp(2.2rem, 8vw, 4rem);
-  letter-spacing: 0.18em;
-  margin: 0 -0.18em 10px 0;
+  font-size: 66px;
+  letter-spacing: 0.12em;
+  margin: 0 -0.12em 11px 0;
 }
 .percent {
-  margin-top: 10px;
-  font-size: clamp(3rem, 12vw, 5.5rem);
-  letter-spacing: 0.1em;
-  margin-right: -0.1em;
-  font-variant-numeric: tabular-nums;
+  margin-top: 11px;
+  font-size: 88px;
+  letter-spacing: 0.04em;
+  margin-right: -0.04em;
 }
 /* Drawn by the shader; this only reserves the space and marks where. */
 #bar {
@@ -941,14 +976,13 @@ button {
 .score {
   display: flex;
   align-items: baseline;
-  gap: 14px;
-  font: bold 2rem/1 var(--display);
-  letter-spacing: 0.14em;
+  gap: 16px;
+  font: var(--t-l)/1 var(--display);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 .score strong {
-  font-size: 1.2em;
-  font-variant-numeric: tabular-nums;
+  font-size: 44px;
 }
 /* Black on the blue half, as in the original. */
 .score.creators {
@@ -956,9 +990,9 @@ button {
 }
 .target {
   padding: 5px 11px;
-  border-radius: 999px;
+  border-radius: var(--edge);
   background: rgb(0 0 0 / 0.22);
-  font: 600 0.72rem var(--ui);
+  font: var(--t-s) var(--ui);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-2);
@@ -982,17 +1016,17 @@ button {
   flex-direction: column;
   align-items: center;
   padding: 8px 26px;
-  border-radius: 999px;
+  border-radius: var(--edge);
   color: #000;
   white-space: nowrap;
 }
 .banner strong {
-  font: bold 1.5rem var(--display);
+  font: var(--t-l) var(--display);
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 .banner span {
-  font: 700 0.78rem var(--ui);
+  font: var(--t-s) var(--ui);
 }
 .frenzy {
   top: 16%;
@@ -1020,7 +1054,7 @@ button {
   display: flex;
   gap: 2px;
   padding: 4px;
-  border-radius: 999px;
+  border-radius: var(--edge);
   background: rgb(10 14 16 / 0.55);
   border: 1px solid var(--line);
 }
@@ -1030,9 +1064,9 @@ button {
   width: 42px;
   height: 42px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--edge);
   background: none;
-  font-size: 1.35rem;
+  font-size: var(--t-l);
   cursor: pointer;
   transition: transform 0.1s;
 }
@@ -1052,7 +1086,7 @@ button {
 .floater {
   position: absolute;
   bottom: calc(var(--footer) + var(--safe-b) + 60px);
-  font-size: 2.6rem;
+  font-size: var(--t-xl);
   animation: float-up 2.6s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
 }
 @keyframes float-up {
@@ -1083,9 +1117,9 @@ button {
   top: 0;
   opacity: 0;
   padding: 5px 10px 4px;
-  border-radius: 999px;
+  border-radius: var(--edge);
   background: white;
-  font: bold 1.05rem/1 var(--display);
+  font: var(--t-m)/1 var(--display);
   letter-spacing: 0.06em;
   white-space: nowrap;
   box-shadow: 0 4px 14px rgb(0 0 0 / 0.35);
@@ -1101,7 +1135,7 @@ button {
   padding: 6px 12px 5px;
   background: linear-gradient(135deg, #ffd54f, #ff8f00);
   color: #000;
-  font-size: 1.2rem;
+  font-size: var(--t-l);
   text-transform: uppercase;
 }
 body[data-flashing] #chips {
@@ -1118,7 +1152,6 @@ body[data-flashing] #chips {
   display: flex;
   justify-content: space-between;
   font-family: var(--display);
-  font-weight: bold;
 }
 .roster {
   flex: 1;
@@ -1128,7 +1161,7 @@ body[data-flashing] #chips {
   flex-wrap: wrap;
   align-content: flex-start;
   gap: 4px 14px;
-  font-size: 1.1rem;
+  font-size: var(--t-m);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1160,8 +1193,7 @@ body[data-flashing] #chips {
   background: white;
 }
 .title h1 {
-  font-size: 3.4rem;
-  line-height: 1;
+  font: 3.4rem/1 var(--logo);
   color: #000;
   letter-spacing: 0.16em;
   margin-right: -0.16em;
@@ -1191,9 +1223,9 @@ body[data-flashing] #chips {
   background: rgb(15 20 23 / 0.95);
 }
 .results h1 {
-  font: bold clamp(2rem, 8vw, 3.2rem) / 1.05 var(--display);
-  letter-spacing: 0.12em;
-  margin-top: 4px;
+  font: 44px/1.1 var(--display);
+  letter-spacing: 0.08em;
+  margin-top: 6px;
   text-transform: uppercase;
 }
 .results h1.creators {
@@ -1204,9 +1236,8 @@ body[data-flashing] #chips {
 }
 .final {
   display: flex;
-  gap: 10px;
-  font: bold 1.6rem var(--display);
-  font-variant-numeric: tabular-nums;
+  gap: 11px;
+  font: var(--t-xl) var(--display);
 }
 .final .destroyers {
   color: var(--destroyers-ink);
@@ -1219,7 +1250,6 @@ body[data-flashing] #chips {
 }
 .verdict {
   color: var(--text-2);
-  font-weight: 600;
 }
 .result-list {
   list-style: none;
@@ -1233,7 +1263,7 @@ body[data-flashing] #chips {
   align-items: center;
   gap: 12px;
   padding: 10px 8px;
-  border-radius: 12px;
+  border-radius: var(--edge);
 }
 .result-list li + li {
   border-top: 1px solid var(--line);
@@ -1255,7 +1285,6 @@ body[data-flashing] #chips {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-weight: 600;
   white-space: normal;
 }
 .badges {
@@ -1265,11 +1294,10 @@ body[data-flashing] #chips {
 }
 .badge {
   padding: 2px 8px;
-  border-radius: 999px;
-  background: rgb(233 30 99 / 0.2);
-  color: #ffc1d6;
-  font-size: 0.7rem;
-  font-weight: 700;
+  border-radius: var(--edge);
+  background: rgb(255 210 63 / 0.14);
+  color: var(--yellow);
+  font-size: var(--t-s);
   white-space: nowrap;
 }
 .stat {
@@ -1279,12 +1307,12 @@ body[data-flashing] #chips {
   min-width: 52px;
 }
 .stat strong {
-  font-size: 1.05rem;
+  font-size: var(--t-m);
   font-variant-numeric: tabular-nums;
 }
 .stat small {
   color: var(--text-3);
-  font-size: 0.7rem;
+  font-size: var(--t-s);
 }
 .results .actions {
   display: flex;
@@ -1303,8 +1331,8 @@ body[data-flashing] #chips {
   justify-content: center;
   pointer-events: none;
   color: black;
-  font-family: var(--display);
-  font-weight: bold;
+  /* The original's flash screens, in the original's type. */
+  font-family: var(--logo);
 }
 /* Laid out once at full size; the flash player scales it with transforms. */
 #flash-text {
@@ -1327,7 +1355,7 @@ body[data-flashing] #chips {
   left: 50%;
   transform: translateX(-50%);
   width: min(640px, calc(100% - 48px));
-  font: 600 0.75rem/1.6 var(--ui);
+  font: var(--t-s)/1.6 var(--ui);
   letter-spacing: 0.08em;
   text-align: center;
   text-transform: uppercase;
@@ -1349,9 +1377,8 @@ body[data-flashing] .room > :not(.floaters) {
   translate: -50% 0;
   max-width: calc(100% - 32px);
   padding: 12px 20px;
-  border-radius: 14px;
+  border-radius: var(--edge);
   background: var(--pink);
-  font-weight: 600;
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.4);
   cursor: pointer;
 }
@@ -1367,11 +1394,11 @@ body[data-flashing] .room > :not(.floaters) {
   white-space: nowrap;
 }
 .toast.achievement .trophy {
-  font-size: 1.8rem;
+  font-size: var(--t-xl);
 }
 .toast.achievement small {
   display: block;
-  font-size: 0.65rem;
+  font-size: var(--t-s);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   opacity: 0.7;
@@ -1471,7 +1498,7 @@ body[data-flashing] .room > :not(.floaters) {
   }
   .card {
     padding: 16px;
-    border-radius: 14px;
+    border-radius: var(--edge);
   }
   .home-grid,
   .lobby-grid {
@@ -1499,12 +1526,12 @@ body[data-flashing] .room > :not(.floaters) {
     padding: 14px 12px;
   }
   .team-head h2 {
-    font-size: 0.9rem;
+    font-size: var(--t-s);
     letter-spacing: 0.12em;
   }
   .people li {
     gap: 8px;
-    font-size: 0.92rem;
+    font-size: var(--t-m);
   }
   /* No room for the tag: your own row is tinted instead. */
   .people .you {
@@ -1516,7 +1543,7 @@ body[data-flashing] .room > :not(.floaters) {
   .people .avatar {
     width: 26px;
     height: 26px;
-    font-size: 0.75rem;
+    font-size: var(--t-s);
   }
   .switch {
     align-self: stretch;
@@ -1541,6 +1568,19 @@ body[data-flashing] .room > :not(.floaters) {
 
   .corner {
     top: 12px;
+    font-size: var(--t-s);
+  }
+  .call {
+    font-size: 44px;
+  }
+  .percent {
+    font-size: 66px;
+  }
+  .room-id strong {
+    font-size: 33px;
+  }
+  .results h1 {
+    font-size: 33px;
   }
   .corner.tl {
     left: 12px;
@@ -1562,14 +1602,14 @@ body[data-flashing] .room > :not(.floaters) {
     flex-direction: column;
     align-items: flex-start;
     gap: 2px;
-    font-size: 0.85rem;
+    font-size: var(--t-s);
   }
   .score.creators {
     flex-direction: column-reverse;
     align-items: flex-end;
   }
   .score strong {
-    font-size: 2.6em;
+    font-size: 44px;
   }
   .target {
     margin-bottom: 4px;
@@ -1580,16 +1620,16 @@ body[data-flashing] .room > :not(.floaters) {
   .reactions button {
     width: 40px;
     height: 40px;
-    font-size: 1.25rem;
+    font-size: var(--t-l);
   }
   .banner strong {
-    font-size: 1.2rem;
+    font-size: var(--t-l);
   }
 
   .roster {
     padding: 10px 12px 0;
     gap: 2px 10px;
-    font-size: 0.78rem;
+    font-size: var(--t-s);
   }
   .title {
     padding: 4px 16px 0;
