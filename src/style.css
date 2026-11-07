@@ -6,11 +6,18 @@
   font-display: block;
 }
 
-/* Departure Mono (Helena Zhang and Tobias Fried, MIT). Drawn on an 11 px grid,
-   so sizes here are multiples of 5.5 px: crisp at 2x and 3x pixel density. */
+/* Jersey 10 (Sarah Cadigan-Fried, OFL) for the game's own words: tall pixel
+   capitals, sized in tens so its pixels land whole. Geist Mono (Vercel, OFL)
+   for everything you read in menus. */
 @font-face {
-  font-family: 'Departure Mono';
-  src: url('/fonts/DepartureMono.woff2') format('woff2');
+  font-family: 'Jersey 10';
+  src: url('/fonts/Jersey10.woff2') format('woff2');
+  font-display: block;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono.woff2') format('woff2');
+  font-weight: 100 900;
   font-display: block;
 }
 
@@ -28,14 +35,14 @@
   --creators-ink: #4fc3ff;
   --destroyers-ink: #b0bec5;
 
-  /* The game's type: one pixel monospace. Governor is only the logo. */
-  --display: 'Departure Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
-  --ui: var(--display);
+  /* Pixel display type for the game, a monospace for menus. Governor is only the logo. */
+  --display: 'Jersey 10', 'Geist Mono', ui-monospace, monospace;
+  --ui: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --logo: Governor, 'Product Sans', Arial, sans-serif;
-  --t-s: 11px;
-  --t-m: 16.5px;
-  --t-l: 22px;
-  --t-xl: 33px;
+  --t-s: 12px;
+  --t-m: 15px;
+  --t-l: 20px;
+  --t-xl: 30px;
   --yellow: #ffd23f;
   --edge: 4px;
 
@@ -64,7 +71,7 @@ body,
   overflow: hidden;
   overscroll-behavior: none;
   font-family: var(--ui);
-  font-size: 16.5px;
+  font-size: 15px;
   color: white;
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
@@ -263,7 +270,7 @@ button {
   padding: 11px 22px;
 }
 .hero-btn span {
-  font: var(--t-l)/1 var(--display);
+  font: 30px/1 var(--display);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -350,7 +357,7 @@ button {
   border: 1px solid var(--line);
   border-radius: 2px;
   background: var(--raised);
-  font: var(--t-m) var(--display);
+  font: 20px var(--display);
   letter-spacing: 0.1em;
 }
 
@@ -460,7 +467,7 @@ button {
   width: 0;
   min-width: 5.5em;
   text-align: center;
-  font: var(--t-m) var(--display);
+  font: 20px var(--display);
   letter-spacing: 0.3em;
   text-transform: uppercase;
 }
@@ -627,7 +634,7 @@ button {
   gap: 4px;
 }
 .room-id strong {
-  font: 44px/1 var(--display);
+  font: 60px/1 var(--display);
   letter-spacing: 0.12em;
   margin-right: -0.12em;
   user-select: text;
@@ -663,7 +670,7 @@ button {
   justify-content: space-between;
 }
 .team-head h2 {
-  font: var(--t-m) var(--display);
+  font: 20px var(--display);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--team-ink);
@@ -847,7 +854,7 @@ button {
   position: absolute;
   top: 18px;
   max-width: calc(50% - 28px);
-  font: var(--t-m) / 1.3 var(--display);
+  font: 20px / 1.1 var(--display);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -859,12 +866,13 @@ button {
   text-align: right;
 }
 .corner .sub {
-  font-size: var(--t-s);
+  font: var(--t-s) var(--ui);
+  letter-spacing: 0.06em;
   opacity: 0.65;
 }
 .tv-code {
   margin-top: 4px;
-  font-size: 44px;
+  font-size: 60px;
   letter-spacing: 0.12em;
 }
 .np {
@@ -948,13 +956,13 @@ button {
     calc(var(--split) * -1) 0 rgb(0 230 255 / 0.75);
 }
 .call {
-  font-size: 66px;
+  font-size: 90px;
   letter-spacing: 0.12em;
   margin: 0 -0.12em 11px 0;
 }
 .percent {
   margin-top: 11px;
-  font-size: 88px;
+  font-size: 120px;
   letter-spacing: 0.04em;
   margin-right: -0.04em;
 }
@@ -977,12 +985,12 @@ button {
   display: flex;
   align-items: baseline;
   gap: 16px;
-  font: var(--t-l)/1 var(--display);
-  letter-spacing: 0.08em;
+  font: 30px/1 var(--display);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .score strong {
-  font-size: 44px;
+  font-size: 60px;
 }
 /* Black on the blue half, as in the original. */
 .score.creators {
@@ -1021,8 +1029,8 @@ button {
   white-space: nowrap;
 }
 .banner strong {
-  font: var(--t-l) var(--display);
-  letter-spacing: 0.16em;
+  font: 30px var(--display);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 .banner span {
@@ -1119,7 +1127,7 @@ button {
   padding: 5px 10px 4px;
   border-radius: var(--edge);
   background: white;
-  font: var(--t-m)/1 var(--display);
+  font: 20px/1 var(--display);
   letter-spacing: 0.06em;
   white-space: nowrap;
   box-shadow: 0 4px 14px rgb(0 0 0 / 0.35);
@@ -1161,8 +1169,8 @@ body[data-flashing] #chips {
   flex-wrap: wrap;
   align-content: flex-start;
   gap: 4px 14px;
-  font-size: var(--t-m);
-  letter-spacing: 0.08em;
+  font-size: 20px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .roster.creators {
@@ -1223,7 +1231,7 @@ body[data-flashing] #chips {
   background: rgb(15 20 23 / 0.95);
 }
 .results h1 {
-  font: 44px/1.1 var(--display);
+  font: 60px/1 var(--display);
   letter-spacing: 0.08em;
   margin-top: 6px;
   text-transform: uppercase;
@@ -1237,7 +1245,7 @@ body[data-flashing] #chips {
 .final {
   display: flex;
   gap: 11px;
-  font: var(--t-xl) var(--display);
+  font: 40px var(--display);
 }
 .final .destroyers {
   color: var(--destroyers-ink);
@@ -1404,8 +1412,8 @@ body[data-flashing] .room > :not(.floaters) {
   opacity: 0.7;
 }
 .toast.achievement strong {
-  font-family: var(--display);
-  letter-spacing: 0.12em;
+  font: 20px var(--display);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -1568,19 +1576,19 @@ body[data-flashing] .room > :not(.floaters) {
 
   .corner {
     top: 12px;
-    font-size: var(--t-s);
+    font-size: 20px;
   }
   .call {
-    font-size: 44px;
+    font-size: 60px;
   }
   .percent {
-    font-size: 66px;
+    font-size: 90px;
   }
   .room-id strong {
-    font-size: 33px;
+    font-size: 40px;
   }
   .results h1 {
-    font-size: 33px;
+    font-size: 40px;
   }
   .corner.tl {
     left: 12px;
@@ -1602,20 +1610,20 @@ body[data-flashing] .room > :not(.floaters) {
     flex-direction: column;
     align-items: flex-start;
     gap: 2px;
-    font-size: var(--t-s);
+    font-size: 20px;
   }
   .score.creators {
     flex-direction: column-reverse;
     align-items: flex-end;
   }
   .score strong {
-    font-size: 44px;
+    font-size: 60px;
   }
   .target {
     margin-bottom: 4px;
   }
   .reactions {
-    bottom: 74px;
+    bottom: 104px;
   }
   .reactions button {
     width: 40px;
@@ -1629,7 +1637,7 @@ body[data-flashing] .room > :not(.floaters) {
   .roster {
     padding: 10px 12px 0;
     gap: 2px 10px;
-    font-size: var(--t-s);
+    font-size: 15px;
   }
   .title {
     padding: 4px 16px 0;
