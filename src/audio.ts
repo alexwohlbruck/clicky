@@ -1,6 +1,6 @@
 import type { Team, Track } from '../shared/protocol'
 import playlist from '../shared/tracks.json'
-import { beatIndex, beatLength, isDownbeat, nextBeat, sectionAt, type Analysis } from '../shared/music'
+import { beatIndex, beatLength, isDownbeat, sectionAt, type Analysis } from '../shared/music'
 import type { Cues } from './flash'
 
 /**
@@ -29,10 +29,9 @@ export class Sound {
   /** The song's clean and overdriven paths, crossfaded to wreck it as a round ends. */
   private songDry!: GainNode
   private songWet!: GainNode
-  /** A win thins the song out from below and throws it into an echo. */
-  private songHigh!: BiquadFilterNode
-  private echoSend!: GainNode
-  private echo!: DelayNode
+  /** A win brightens the song and swells it into a hall. */
+  private songShine!: BiquadFilterNode
+  private hallSend!: GainNode
 
   /** The current song's analysis, once the server has it. */
   analysis: Analysis | null = null
@@ -125,21 +124,24 @@ export class Sound {
     song.connect(this.songGate)
     this.songGate.connect(this.songDry).connect(this.songFilter)
     this.songGate.connect(crush).connect(tone).connect(this.songWet).connect(this.songFilter)
-    this.songHigh = context.createBiquadFilter()
-    this.songHigh.type = 'highpass'
-    this.songHigh.frequency.value = 10
-    this.songFilter.connect(this.songHigh).connect(this.musicBus)
-    // A feedback echo off the song's output: it keeps ringing after the song is gone.
-    this.echoSend = context.createGain()
-    this.echoSend.gain.value = 0
-    this.echo = context.createDelay(2)
-    const feedback = context.createGain()
-    feedback.gain.value = 0.55
-    const thin = context.createBiquadFilter()
-    thin.type = 'highpass'
-    thin.frequency.value = 400
-    this.songHigh.connect(this.echoSend).connect(this.echo).connect(thin).connect(feedback).connect(this.echo)
-    thin.connect(this.musicBus)
+    this.songShine = context.createBiquadFilter()
+    this.songShine.type = 'highshelf'
+    this.songShine.frequency.value = 3500
+    this.songShine.gain.value = 0
+    this.songFilter.connect(this.songShine).connect(this.musicBus)
+    // A big hall off the song's output, so it rings on after the song is gone:
+    // three seconds of decaying stereo noise as the room.
+    this.hallSend = context.createGain()
+    this.hallSend.gain.value = 0
+    const hall = context.createConvolver()
+    const length = context.sampleRate * 3
+    const room = context.createBuffer(2, length, context.sampleRate)
+    for (let channel = 0; channel < 2; channel++) {
+      const data = room.getChannelData(channel)
+      for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp((-i / context.sampleRate) * 2)
+    }
+    hall.buffer = room
+    this.songShine.connect(this.hallSend).connect(hall).connect(this.musicBus)
 
     this.introBuffer = this.introBytes.then((bytes) => context.decodeAudioData(bytes))
 
@@ -399,11 +401,11 @@ export class Sound {
    *
    * - a loss winds it down like a tape stopping, pitch and all, overdriven
    *   into a closing lowpass, dying by the last hit;
-   * - a win builds it like a DJ into a drop: the tape speeds up, the bass
-   *   thins away under a rising highpass, it rolls in faster repeats on the
-   *   beat, and is thrown into an echo that rings on into the last hit.
+   * - a win keeps it going at full speed and blooms it: brighter, pumping on
+   *   its own beats like a sidechain, swelling into a hall that rings on
+   *   after the song stops, into the last hit.
    *
-   * Spectators get the build without the speed-up.
+   * Spectators hear the win.
    */
   private wreckSong(cues: Cues, mood: 'won' | 'lost' | 'neutral', at: (ms: number) => number) {
     const context = this.context!
@@ -414,7 +416,7 @@ export class Sound {
     const stop = second ? at(second.from) : at(cues.end) * 0.9
     const gone = second ? at(cues.strobes[2]?.from ?? cues.end) : at(cues.end)
     const gate = this.songGate.gain
-    const params = [gate, this.songDry.gain, this.songWet.gain, this.songFilter.frequency, this.songHigh.frequency, this.echoSend.gain]
+    const params = [gate, this.songDry.gain, this.songWet.gain, this.songFilter.frequency, this.songShine.gain, this.hallSend.gain]
     for (const param of params) {
       param.cancelScheduledValues(now)
       param.setValueAtTime(param.value, now)
@@ -438,30 +440,23 @@ export class Sound {
       this.songFilter.frequency.setValueAtTime(9000, hit)
       this.songFilter.frequency.exponentialRampToValueAtTime(500, now + stop)
     } else {
-      // Clean, thinning from below as it builds.
-      this.songHigh.frequency.setValueAtTime(40, hit)
-      this.songHigh.frequency.exponentialRampToValueAtTime(second ? 1400 : 1100, now + stop)
-      // A roll: repeats on the beat that get faster, a beat, a half, a quarter, an eighth.
-      const ms = this.musicMs()
-      const beat = this.analysis && ms !== null ? beatLength(this.analysis, ms) / 1000 : 0.5
-      // Starting on a beat of the song, shortly after the hit.
-      let from = hit + Math.min(0.3, stop * 0.1)
-      const next = this.analysis && ms !== null ? nextBeat(this.analysis, ms + (from - now) * 1000) : null
-      if (next && next.at - ms! < (from - now + beat) * 1000) from = now + (next.at - ms!) / 1000
+      // Brighter from the hit.
+      this.songShine.gain.setTargetAtTime(7, hit, 0.1)
       const until = now + (second ? stop : stop * 0.85)
-      const stages = [1, 0.5, 0.25, 0.125]
-      for (let t = from; t < until; ) {
-        const step = beat * stages[Math.min(stages.length - 1, Math.floor(((t - from) / (until - from)) * stages.length))]!
-        if (t + step * 0.6 > until) break
-        gate.setValueAtTime(body, t)
-        gate.setValueAtTime(body * 0.15, t + step * 0.6)
-        t += step
+      // Pumping on the song's own beats, like a sidechain to a kick.
+      const ms = this.musicMs()
+      if (this.analysis && ms !== null) {
+        const beat = beatLength(this.analysis, ms) / 1000
+        for (const beatAt of this.analysis.beats) {
+          const t = now + (beatAt - ms) / 1000
+          if (t < hit + 0.25 || t > until - 0.05) continue
+          gate.setValueAtTime(body * 0.3, t)
+          gate.setTargetAtTime(body, t + 0.01, beat * 0.2)
+        }
       }
-      // Thrown into the echo through the second half: the song stops, its repeats ring on.
-      this.echo.delayTime.setValueAtTime(Math.min(1.5, beat * 0.75), now)
-      this.echoSend.gain.setValueAtTime(0, (from + until) / 2)
-      this.echoSend.gain.linearRampToValueAtTime(0.7, until)
-      this.echoSend.gain.setTargetAtTime(0, now + gone, 0.4)
+      // Swelling into the hall, which rings on once the song stops.
+      this.hallSend.gain.setValueAtTime(0.1, hit)
+      this.hallSend.gain.linearRampToValueAtTime(1.8, until)
     }
 
     if (second) {
@@ -481,8 +476,7 @@ export class Sound {
 
     // The tape changing speed. Only the server's copy, which can seek back to
     // the room's place afterwards; a live stream would stay off it.
-    if (!this.kept || mood === 'neutral') return
-    const target = lost ? 0.28 : 1.15
+    if (!this.kept || !lost) return
     this.music.preservesPitch = false
     ;(this.music as HTMLAudioElement & { webkitPreservesPitch?: boolean }).webkitPreservesPitch = false
     this.wrecking = true
@@ -491,8 +485,8 @@ export class Sound {
     const length = stop * 1000
     this.windDown = setInterval(() => {
       const t = Math.min(1, Math.max(0, (performance.now() - start) / length))
-      // A loss drags, slow at first then sinking, like a platter losing power; a win winds up.
-      this.music.playbackRate = 1 + (target - 1) * (lost ? t ** 1.6 : t ** 0.8)
+      // Slow at first, then dragging: a platter losing power.
+      this.music.playbackRate = 1 - 0.72 * t ** 1.6
       if (t >= 1) clearInterval(this.windDown)
     }, 25)
   }
@@ -507,8 +501,11 @@ export class Sound {
     this.songWet.gain.cancelScheduledValues(at)
     this.songDry.gain.setValueAtTime(1, at)
     this.songWet.gain.setValueAtTime(0, at)
-    this.songHigh.frequency.cancelScheduledValues(at)
-    this.songHigh.frequency.setValueAtTime(10, at)
+    this.songShine.gain.cancelScheduledValues(at)
+    this.songShine.gain.setValueAtTime(0, at)
+    // The hall stops taking the song in; what's ringing rings out.
+    this.hallSend.gain.cancelScheduledValues(at)
+    this.hallSend.gain.setTargetAtTime(0, at, 0.05)
     if (!this.wrecking) return
     clearTimeout(this.mending)
     this.mending = setTimeout(() => {
@@ -516,7 +513,7 @@ export class Sound {
       this.wrecking = false
       this.music.playbackRate = 1
       this.music.preservesPitch = true
-      // Slowed or sped up, the song is off the room's place; the next frame seeks it back.
+      // The slowed song fell behind; the next frame seeks it back into place.
       this.lastSyncAt = 0
     }, delay * 1000)
   }
