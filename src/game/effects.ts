@@ -164,9 +164,8 @@ hooks.roundOver = (winner, gameOver) => {
   const text = gameOver ? `${TEAM_NAME[winner]} win` : `Point to ${TEAM_NAME[winner]}`
   // The score is scheduled up front against the same timeline the flash plays.
   sound.score(cues(frames, text), !state.me ? 'neutral' : winner === state.me.team ? 'won' : 'lost', gameOver)
-  // The song cuts dead on the hit. After a round it comes back muffled once
-  // the flash has played (see \`waiting\`); after a game, in full for the lobby.
-  sound.cutSong()
+  // The score winds the song down under it. After a round it comes back
+  // muffled once the flash has played (see `waiting`); after a game, in full for the lobby.
   const started = performance.now()
   playFlash(frames, text, onRoundEvent, () => performance.now() - started, () => {
     if (gameOver) sound.openSong()

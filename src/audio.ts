@@ -1,6 +1,7 @@
 import type { Team, Track } from '../shared/protocol'
 import playlist from '../shared/tracks.json'
 import { beatIndex, beatLength, isDownbeat, sectionAt, type Analysis } from '../shared/music'
+import type { Cues } from './flash'
 
 /**
  * Music, voice lines and press sounds through one Web Audio graph. Browsers
@@ -25,6 +26,9 @@ export class Sound {
   /** The room's song goes through a gate and a low-pass, so play can cut it, muffle it and open it up. */
   private songGate!: GainNode
   private songFilter!: BiquadFilterNode
+  /** The song's clean and overdriven paths, crossfaded to wreck it as a round ends. */
+  private songDry!: GainNode
+  private songWet!: GainNode
 
   /** The current song's analysis, once the server has it. */
   analysis: Analysis | null = null
@@ -98,7 +102,26 @@ export class Sound {
     this.songFilter = context.createBiquadFilter()
     this.songFilter.type = 'lowpass'
     this.songFilter.frequency.value = 20000
-    song.connect(this.songGate).connect(this.songFilter).connect(this.musicBus)
+    this.songDry = context.createGain()
+    this.songWet = context.createGain()
+    this.songWet.gain.value = 0
+    const crush = context.createWaveShaper()
+    const curve = new Float32Array(2048)
+    // Hard tanh with a little fold, so it fuzzes rather than just getting louder.
+    for (let i = 0; i < curve.length; i++) {
+      const x = (i / (curve.length - 1)) * 2 - 1
+      curve[i] = Math.tanh(x * 9) * 0.8 + Math.sin(x * 14) * 0.12
+    }
+    crush.curve = curve
+    crush.oversample = '2x'
+    const tone = context.createBiquadFilter()
+    tone.type = 'peaking'
+    tone.frequency.value = 900
+    tone.gain.value = 8
+    song.connect(this.songGate)
+    this.songGate.connect(this.songDry).connect(this.songFilter)
+    this.songGate.connect(crush).connect(tone).connect(this.songWet).connect(this.songFilter)
+    this.songFilter.connect(this.musicBus)
 
     this.introBuffer = this.introBytes.then((bytes) => context.decodeAudioData(bytes))
 
@@ -189,7 +212,7 @@ export class Sound {
    * there is one. Otherwise Jukebox streams it live (seconds to start, and no
    * seeking), and the kept copy takes over as soon as the server has it.
    */
-  /** A better reading of the room's position in its song; \`follow\` closes the gap. */
+  /** A better reading of the room's position in its song; `follow` closes the gap. */
   retime(elapsedMs: number) {
     if (!this.inRoom) return
     this.roomAnchor = performance.now() - elapsedMs
@@ -321,7 +344,7 @@ export class Sound {
    */
   private follow(ms: number) {
     const now = performance.now()
-    if (this.roomAnchor === null || !this.kept || now - this.loadedAt < 1500 || now - this.lastSyncAt < 3000) return
+    if (this.roomAnchor === null || !this.kept || this.wrecking || now - this.loadedAt < 1500 || now - this.lastSyncAt < 3000) return
     this.lastSyncAt = now
     const drift = now - this.roomAnchor - ms
     if (Math.abs(drift) < 40) return
@@ -352,18 +375,108 @@ export class Sound {
     return now === null ? null : (ms - now) / 1000
   }
 
-  /** Cut the song dead, as a round ends. */
-  cutSong() {
-    if (!this.songGate) return
-    const at = this.context!.currentTime
-    this.songGate.gain.cancelScheduledValues(at)
-    this.songGate.gain.setTargetAtTime(0, at, 0.008)
+  /**
+   * Wreck the song under a round's ending instead of cutting it: it ducks
+   * under each hit, overdrives, and winds down like a tape stopping (pitch and
+   * all) into a closing lowpass, gone by the last hit. Laid on the flash's
+   * timeline like the rest of the score. A loss grinds harder and lower.
+   */
+  private wreckSong(cues: Cues, mood: 'won' | 'lost' | 'neutral', at: (ms: number) => number) {
+    const context = this.context!
+    if (!this.songGate || this.music.paused) return
+    const now = context.currentTime
+    const lost = mood === 'lost'
+    const won = mood === 'won'
+    // A game over has a second, faster strobe: the song stops through the first, then chops in the second.
+    const second = cues.strobes[1]
+    const stop = second ? at(second.from) : at(cues.end) * 0.9
+    const gone = second ? at(cues.strobes[2]?.from ?? cues.end) : at(cues.end)
+    const gate = this.songGate.gain
+    const params = [gate, this.songDry.gain, this.songWet.gain, this.songFilter.frequency]
+    for (const param of params) {
+      param.cancelScheduledValues(now)
+      param.setValueAtTime(param.value, now)
+    }
+
+    // Ducked under the impact, then pumping back up; lower under Tong's voice.
+    const hit = now + at(0)
+    const body = lost ? 0.55 : 0.75
+    gate.setValueAtTime(0.25, hit)
+    gate.setTargetAtTime(body, hit + 0.05, 0.15)
+    if (lost) {
+      gate.setTargetAtTime(0.3, hit + 0.35, 0.05)
+      gate.setTargetAtTime(body, hit + 1.4, 0.3)
+    }
+    // Overdriven from the hit, harder as it slows.
+    const drive = lost ? 0.9 : won ? 0.45 : 0.6
+    this.songDry.gain.setTargetAtTime(1 - drive * 0.7, hit, 0.03)
+    this.songWet.gain.setValueAtTime(0, hit)
+    this.songWet.gain.linearRampToValueAtTime(drive * 0.35, hit + 0.08)
+    this.songWet.gain.linearRampToValueAtTime(drive * 0.6, now + stop)
+    this.songDry.gain.linearRampToValueAtTime(1 - drive, now + stop)
+    // The top closes as the tape slows.
+    this.songFilter.frequency.setValueAtTime(lost ? 9000 : 14000, hit)
+    this.songFilter.frequency.exponentialRampToValueAtTime(lost ? 500 : 900, now + stop)
+
+    if (second) {
+      // Chopped on every flip of the fast strobe, then out with the next hit.
+      const step = second.period / 1000
+      for (let t = now + at(second.from); t < now + gone - step; t += step) {
+        gate.setValueAtTime(body, t)
+        gate.setValueAtTime(0, t + step * 0.5)
+      }
+      gate.setTargetAtTime(0, now + gone - step, 0.02)
+    } else {
+      gate.setTargetAtTime(0, now + stop * 0.8, (gone - stop * 0.8) / 3)
+    }
+
+    // The tape stop itself. Only the server's copy, which can seek back to
+    // the room's place afterwards; a slowed live stream would stay behind.
+    if (!this.kept) return
+    const floor = lost ? 0.28 : won ? 0.5 : 0.4
+    this.music.preservesPitch = false
+    ;(this.music as HTMLAudioElement & { webkitPreservesPitch?: boolean }).webkitPreservesPitch = false
+    this.wrecking = true
+    clearInterval(this.windDown)
+    const start = performance.now() + at(0) * 1000
+    const length = stop * 1000
+    this.windDown = setInterval(() => {
+      const t = Math.min(1, Math.max(0, (performance.now() - start) / length))
+      // Slow at first, then dragging: a platter losing power.
+      this.music.playbackRate = Math.max(floor, 1 - (1 - floor) * t ** 1.6)
+      if (t >= 1) clearInterval(this.windDown)
+    }, 25)
   }
+
+  private wrecking = false
+  private windDown: ReturnType<typeof setInterval> | undefined
+
+  /** Back to normal speed and clean, `delay` seconds from now, and back on the room's timeline. */
+  private mendSong(delay: number) {
+    const at = this.context!.currentTime + delay
+    this.songDry.gain.cancelScheduledValues(at)
+    this.songWet.gain.cancelScheduledValues(at)
+    this.songDry.gain.setValueAtTime(1, at)
+    this.songWet.gain.setValueAtTime(0, at)
+    if (!this.wrecking) return
+    clearTimeout(this.mending)
+    this.mending = setTimeout(() => {
+      clearInterval(this.windDown)
+      this.wrecking = false
+      this.music.playbackRate = 1
+      this.music.preservesPitch = true
+      // The slowed song fell behind; the next frame seeks it back into place.
+      this.lastSyncAt = 0
+    }, delay * 1000)
+  }
+
+  private mending: ReturnType<typeof setTimeout> | undefined
 
   /** Bring the song back in, muffled, `delay` seconds from now, while waiting to play. */
   muffleSong(delay = 0, seconds = 0.6) {
     if (!this.songGate) return
     const at = this.context!.currentTime + Math.max(0, delay)
+    this.mendSong(Math.max(0, delay))
     this.songGate.gain.cancelScheduledValues(at)
     this.songGate.gain.setTargetAtTime(0.6, at, seconds / 3)
     this.songFilter.frequency.cancelScheduledValues(at)
@@ -374,6 +487,7 @@ export class Sound {
   openSong(delay = 0) {
     if (!this.songGate) return
     const at = this.context!.currentTime + Math.max(0, delay)
+    this.mendSong(Math.max(0, delay))
     this.songGate.gain.cancelScheduledValues(at)
     this.songGate.gain.setTargetAtTime(1, at, 0.01)
     this.songFilter.frequency.cancelScheduledValues(at)
@@ -672,7 +786,7 @@ export class Sound {
    * for a win and falling for a loss, a riser into each faster strobe, and a
    * last hit. Times are ms into the sequence.
    */
-  score(cues: { strobes: { from: number; to: number; period: number }[]; letters: number[]; end: number }, mood: 'won' | 'lost' | 'neutral', gameOver: boolean) {
+  score(cues: Cues, mood: 'won' | 'lost' | 'neutral', gameOver: boolean) {
     const context = this.context
     if (!context) return
     // Scheduled ahead of output latency so it's heard as the frame is seen.
@@ -682,6 +796,7 @@ export class Sound {
     const major = [1, 1.26, 1.5, 2]
     const diminished = [1, 1.19, 1.41, 1.68]
 
+    this.wreckSong(cues, mood, at)
     this.impact(0, lost ? diminished : major, gameOver)
     if (lost) this.tong(0.35)
 
