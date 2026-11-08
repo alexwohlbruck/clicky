@@ -1,6 +1,6 @@
 import type { Team, Track } from '../shared/protocol'
 import playlist from '../shared/tracks.json'
-import { beatIndex, beatLength, isDownbeat, sectionAt, type Analysis } from '../shared/music'
+import { beatIndex, beatLength, isDownbeat, nextBeat, sectionAt, type Analysis } from '../shared/music'
 import type { Cues } from './flash'
 
 /**
@@ -29,6 +29,10 @@ export class Sound {
   /** The song's clean and overdriven paths, crossfaded to wreck it as a round ends. */
   private songDry!: GainNode
   private songWet!: GainNode
+  /** A win thins the song out from below and throws it into an echo. */
+  private songHigh!: BiquadFilterNode
+  private echoSend!: GainNode
+  private echo!: DelayNode
 
   /** The current song's analysis, once the server has it. */
   analysis: Analysis | null = null
@@ -121,7 +125,21 @@ export class Sound {
     song.connect(this.songGate)
     this.songGate.connect(this.songDry).connect(this.songFilter)
     this.songGate.connect(crush).connect(tone).connect(this.songWet).connect(this.songFilter)
-    this.songFilter.connect(this.musicBus)
+    this.songHigh = context.createBiquadFilter()
+    this.songHigh.type = 'highpass'
+    this.songHigh.frequency.value = 10
+    this.songFilter.connect(this.songHigh).connect(this.musicBus)
+    // A feedback echo off the song's output: it keeps ringing after the song is gone.
+    this.echoSend = context.createGain()
+    this.echoSend.gain.value = 0
+    this.echo = context.createDelay(2)
+    const feedback = context.createGain()
+    feedback.gain.value = 0.55
+    const thin = context.createBiquadFilter()
+    thin.type = 'highpass'
+    thin.frequency.value = 400
+    this.songHigh.connect(this.echoSend).connect(this.echo).connect(thin).connect(feedback).connect(this.echo)
+    thin.connect(this.musicBus)
 
     this.introBuffer = this.introBytes.then((bytes) => context.decodeAudioData(bytes))
 
@@ -376,47 +394,75 @@ export class Sound {
   }
 
   /**
-   * Wreck the song under a round's ending instead of cutting it: it ducks
-   * under each hit, overdrives, and winds down like a tape stopping (pitch and
-   * all) into a closing lowpass, gone by the last hit. Laid on the flash's
-   * timeline like the rest of the score. A loss grinds harder and lower.
+   * The song under a round's ending, instead of a dead cut, laid on the
+   * flash's timeline like the rest of the score. It ducks under each hit, then:
+   *
+   * - a loss winds it down like a tape stopping, pitch and all, overdriven
+   *   into a closing lowpass, dying by the last hit;
+   * - a win builds it like a DJ into a drop: the tape speeds up, the bass
+   *   thins away under a rising highpass, it rolls in faster repeats on the
+   *   beat, and is thrown into an echo that rings on into the last hit.
+   *
+   * Spectators get the build without the speed-up.
    */
   private wreckSong(cues: Cues, mood: 'won' | 'lost' | 'neutral', at: (ms: number) => number) {
     const context = this.context!
     if (!this.songGate || this.music.paused) return
     const now = context.currentTime
-    const lost = mood === 'lost'
-    const won = mood === 'won'
-    // A game over has a second, faster strobe: the song stops through the first, then chops in the second.
+    // A game over has a second, faster strobe: the song moves through the first, then chops in the second.
     const second = cues.strobes[1]
     const stop = second ? at(second.from) : at(cues.end) * 0.9
     const gone = second ? at(cues.strobes[2]?.from ?? cues.end) : at(cues.end)
     const gate = this.songGate.gain
-    const params = [gate, this.songDry.gain, this.songWet.gain, this.songFilter.frequency]
+    const params = [gate, this.songDry.gain, this.songWet.gain, this.songFilter.frequency, this.songHigh.frequency, this.echoSend.gain]
     for (const param of params) {
       param.cancelScheduledValues(now)
       param.setValueAtTime(param.value, now)
     }
-
-    // Ducked under the impact, then pumping back up; lower under Tong's voice.
     const hit = now + at(0)
-    const body = lost ? 0.55 : 0.75
+    const lost = mood === 'lost'
+    const body = lost ? 0.55 : 0.8
     gate.setValueAtTime(0.25, hit)
     gate.setTargetAtTime(body, hit + 0.05, 0.15)
+
     if (lost) {
+      // Lower under Tong's voice.
       gate.setTargetAtTime(0.3, hit + 0.35, 0.05)
       gate.setTargetAtTime(body, hit + 1.4, 0.3)
+      // Overdriven from the hit, harder as it slows, and the top closes.
+      this.songDry.gain.setTargetAtTime(0.4, hit, 0.03)
+      this.songWet.gain.setValueAtTime(0, hit)
+      this.songWet.gain.linearRampToValueAtTime(0.3, hit + 0.08)
+      this.songWet.gain.linearRampToValueAtTime(0.55, now + stop)
+      this.songDry.gain.linearRampToValueAtTime(0.1, now + stop)
+      this.songFilter.frequency.setValueAtTime(9000, hit)
+      this.songFilter.frequency.exponentialRampToValueAtTime(500, now + stop)
+    } else {
+      // Clean, thinning from below as it builds.
+      this.songHigh.frequency.setValueAtTime(40, hit)
+      this.songHigh.frequency.exponentialRampToValueAtTime(second ? 1400 : 1100, now + stop)
+      // A roll: repeats on the beat that get faster, a beat, a half, a quarter, an eighth.
+      const ms = this.musicMs()
+      const beat = this.analysis && ms !== null ? beatLength(this.analysis, ms) / 1000 : 0.5
+      // Starting on a beat of the song, shortly after the hit.
+      let from = hit + Math.min(0.3, stop * 0.1)
+      const next = this.analysis && ms !== null ? nextBeat(this.analysis, ms + (from - now) * 1000) : null
+      if (next && next.at - ms! < (from - now + beat) * 1000) from = now + (next.at - ms!) / 1000
+      const until = now + (second ? stop : stop * 0.85)
+      const stages = [1, 0.5, 0.25, 0.125]
+      for (let t = from; t < until; ) {
+        const step = beat * stages[Math.min(stages.length - 1, Math.floor(((t - from) / (until - from)) * stages.length))]!
+        if (t + step * 0.6 > until) break
+        gate.setValueAtTime(body, t)
+        gate.setValueAtTime(body * 0.15, t + step * 0.6)
+        t += step
+      }
+      // Thrown into the echo through the second half: the song stops, its repeats ring on.
+      this.echo.delayTime.setValueAtTime(Math.min(1.5, beat * 0.75), now)
+      this.echoSend.gain.setValueAtTime(0, (from + until) / 2)
+      this.echoSend.gain.linearRampToValueAtTime(0.7, until)
+      this.echoSend.gain.setTargetAtTime(0, now + gone, 0.4)
     }
-    // Overdriven from the hit, harder as it slows.
-    const drive = lost ? 0.9 : won ? 0.45 : 0.6
-    this.songDry.gain.setTargetAtTime(1 - drive * 0.7, hit, 0.03)
-    this.songWet.gain.setValueAtTime(0, hit)
-    this.songWet.gain.linearRampToValueAtTime(drive * 0.35, hit + 0.08)
-    this.songWet.gain.linearRampToValueAtTime(drive * 0.6, now + stop)
-    this.songDry.gain.linearRampToValueAtTime(1 - drive, now + stop)
-    // The top closes as the tape slows.
-    this.songFilter.frequency.setValueAtTime(lost ? 9000 : 14000, hit)
-    this.songFilter.frequency.exponentialRampToValueAtTime(lost ? 500 : 900, now + stop)
 
     if (second) {
       // Chopped on every flip of the fast strobe, then out with the next hit.
@@ -426,14 +472,17 @@ export class Sound {
         gate.setValueAtTime(0, t + step * 0.5)
       }
       gate.setTargetAtTime(0, now + gone - step, 0.02)
-    } else {
+    } else if (lost) {
       gate.setTargetAtTime(0, now + stop * 0.8, (gone - stop * 0.8) / 3)
+    } else {
+      gate.setValueAtTime(body, now + stop * 0.85)
+      gate.setTargetAtTime(0, now + stop * 0.85, 0.03)
     }
 
-    // The tape stop itself. Only the server's copy, which can seek back to
-    // the room's place afterwards; a slowed live stream would stay behind.
-    if (!this.kept) return
-    const floor = lost ? 0.28 : won ? 0.5 : 0.4
+    // The tape changing speed. Only the server's copy, which can seek back to
+    // the room's place afterwards; a live stream would stay off it.
+    if (!this.kept || mood === 'neutral') return
+    const target = lost ? 0.28 : 1.15
     this.music.preservesPitch = false
     ;(this.music as HTMLAudioElement & { webkitPreservesPitch?: boolean }).webkitPreservesPitch = false
     this.wrecking = true
@@ -442,8 +491,8 @@ export class Sound {
     const length = stop * 1000
     this.windDown = setInterval(() => {
       const t = Math.min(1, Math.max(0, (performance.now() - start) / length))
-      // Slow at first, then dragging: a platter losing power.
-      this.music.playbackRate = Math.max(floor, 1 - (1 - floor) * t ** 1.6)
+      // A loss drags, slow at first then sinking, like a platter losing power; a win winds up.
+      this.music.playbackRate = 1 + (target - 1) * (lost ? t ** 1.6 : t ** 0.8)
       if (t >= 1) clearInterval(this.windDown)
     }, 25)
   }
@@ -458,6 +507,8 @@ export class Sound {
     this.songWet.gain.cancelScheduledValues(at)
     this.songDry.gain.setValueAtTime(1, at)
     this.songWet.gain.setValueAtTime(0, at)
+    this.songHigh.frequency.cancelScheduledValues(at)
+    this.songHigh.frequency.setValueAtTime(10, at)
     if (!this.wrecking) return
     clearTimeout(this.mending)
     this.mending = setTimeout(() => {
@@ -465,7 +516,7 @@ export class Sound {
       this.wrecking = false
       this.music.playbackRate = 1
       this.music.preservesPitch = true
-      // The slowed song fell behind; the next frame seeks it back into place.
+      // Slowed or sped up, the song is off the room's place; the next frame seeks it back.
       this.lastSyncAt = 0
     }, delay * 1000)
   }
