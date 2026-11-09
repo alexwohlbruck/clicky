@@ -32,6 +32,7 @@ export class Sound {
   /** A win brightens the song and swells it into a hall. */
   private songShine!: BiquadFilterNode
   private hallSend!: GainNode
+  private flangeWet!: GainNode
 
   /** The current song's analysis, once the server has it. */
   analysis: Analysis | null = null
@@ -142,6 +143,21 @@ export class Sound {
     }
     hall.buffer = room
     this.songShine.connect(this.hallSend).connect(hall).connect(this.musicBus)
+    // A flanger, for the jet sweep: a few ms of delay swept slowly, fed back on itself.
+    const flange = context.createDelay(0.02)
+    flange.delayTime.value = 0.005
+    const sweep = context.createOscillator()
+    sweep.frequency.value = 0.35
+    const depth = context.createGain()
+    depth.gain.value = 0.004
+    sweep.connect(depth).connect(flange.delayTime)
+    sweep.start()
+    const flangeBack = context.createGain()
+    flangeBack.gain.value = 0.7
+    this.flangeWet = context.createGain()
+    this.flangeWet.gain.value = 0
+    this.songShine.connect(flange).connect(flangeBack).connect(flange)
+    flange.connect(this.flangeWet).connect(this.musicBus)
 
     this.introBuffer = this.introBytes.then((bytes) => context.decodeAudioData(bytes))
 
@@ -401,9 +417,9 @@ export class Sound {
    *
    * - a loss winds it down like a tape stopping, pitch and all, overdriven
    *   into a closing lowpass, dying by the last hit;
-   * - a win keeps it going at full speed and blooms it: brighter, pumping on
-   *   its own beats like a sidechain, swelling into a hall that rings on
-   *   after the song stops, into the last hit.
+   * - a win keeps it going at full speed and blooms it, from the hit: brighter,
+   *   jetting through a flanger, pumping on its own beats like a sidechain,
+   *   deep in a hall that rings on after the song stops, into the last hit.
    *
    * Spectators hear the win.
    */
@@ -416,7 +432,7 @@ export class Sound {
     const stop = second ? at(second.from) : at(cues.end) * 0.9
     const gone = second ? at(cues.strobes[2]?.from ?? cues.end) : at(cues.end)
     const gate = this.songGate.gain
-    const params = [gate, this.songDry.gain, this.songWet.gain, this.songFilter.frequency, this.songShine.gain, this.hallSend.gain]
+    const params = [gate, this.songDry.gain, this.songWet.gain, this.songFilter.frequency, this.songShine.gain, this.hallSend.gain, this.flangeWet.gain]
     for (const param of params) {
       param.cancelScheduledValues(now)
       param.setValueAtTime(param.value, now)
@@ -440,8 +456,9 @@ export class Sound {
       this.songFilter.frequency.setValueAtTime(9000, hit)
       this.songFilter.frequency.exponentialRampToValueAtTime(500, now + stop)
     } else {
-      // Brighter from the hit.
-      this.songShine.gain.setTargetAtTime(7, hit, 0.1)
+      // On the hit, all at once: brighter, flung into the hall, and jetting.
+      this.songShine.gain.setValueAtTime(9, hit)
+      this.flangeWet.gain.setValueAtTime(0.8, hit)
       const until = now + (second ? stop : stop * 0.85)
       // Pumping on the song's own beats, like a sidechain to a kick.
       const ms = this.musicMs()
@@ -449,14 +466,14 @@ export class Sound {
         const beat = beatLength(this.analysis, ms) / 1000
         for (const beatAt of this.analysis.beats) {
           const t = now + (beatAt - ms) / 1000
-          if (t < hit + 0.25 || t > until - 0.05) continue
-          gate.setValueAtTime(body * 0.3, t)
+          if (t < hit + 0.1 || t > until - 0.05) continue
+          gate.setValueAtTime(body * 0.15, t)
           gate.setTargetAtTime(body, t + 0.01, beat * 0.2)
         }
       }
-      // Swelling into the hall, which rings on once the song stops.
-      this.hallSend.gain.setValueAtTime(0.1, hit)
-      this.hallSend.gain.linearRampToValueAtTime(1.8, until)
+      // Deep in the hall, which rings on once the song stops.
+      this.hallSend.gain.setValueAtTime(1.4, hit)
+      this.hallSend.gain.linearRampToValueAtTime(2, until)
     }
 
     if (second) {
@@ -506,6 +523,8 @@ export class Sound {
     // The hall stops taking the song in; what's ringing rings out.
     this.hallSend.gain.cancelScheduledValues(at)
     this.hallSend.gain.setTargetAtTime(0, at, 0.05)
+    this.flangeWet.gain.cancelScheduledValues(at)
+    this.flangeWet.gain.setTargetAtTime(0, at, 0.05)
     if (!this.wrecking) return
     clearTimeout(this.mending)
     this.mending = setTimeout(() => {
