@@ -4,7 +4,7 @@ Clicky runs at `https://clicky.wohlbruck.dev` as the `clicky` Compose service in
 
 ## Automatic updates
 
-Pushing to `main` runs [the publish workflow](../.github/workflows/publish-image.yml): tests, then `ghcr.io/alexwohlbruck/clicky-2:latest`. Watchtower recreates the labeled container when that tag changes.
+Pushing to `master` runs [the publish workflow](../.github/workflows/publish-image.yml): tests, then `ghcr.io/alexwohlbruck/clicky:latest`. Watchtower recreates the labeled container when that tag changes.
 
 The package is private by default when first published. Either make it public under the repository's Packages settings, or log Vega's Docker into GHCR, so `docker compose pull` can fetch it.
 
@@ -13,7 +13,7 @@ The package is private by default when first published. Either make it public un
 ```sh
 sudo mkdir -p /opt/clicky && sudo chown "$USER" /opt/clicky
 cd /opt/clicky
-curl -fsSLO https://raw.githubusercontent.com/alexwohlbruck/clicky-2/main/deploy/compose.yml
+curl -fsSLO https://raw.githubusercontent.com/alexwohlbruck/clicky/master/deploy/compose.yml
 docker compose pull
 docker compose up -d
 docker compose ps

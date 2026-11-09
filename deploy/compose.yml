@@ -1,7 +1,7 @@
 services:
   clicky:
     container_name: clicky
-    image: ghcr.io/alexwohlbruck/clicky-2:latest
+    image: ghcr.io/alexwohlbruck/clicky:latest
     restart: unless-stopped
     environment:
       # Jukebox is on the same Caddy network, so skip the public round trip.

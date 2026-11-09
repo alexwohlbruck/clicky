@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "clicky-2",
+      "name": "clicky",
       "dependencies": {
         "mpg123-decoder": "^1.0.3",
       },

@@ -2,7 +2,7 @@ name: Publish image
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -10,7 +10,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: clicky-image-main
+  group: clicky-image
   cancel-in-progress: true
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository_owner }}/clicky-2
+          images: ghcr.io/${{ github.repository_owner }}/clicky
           tags: |
             type=raw,value=latest
             type=sha,prefix=
