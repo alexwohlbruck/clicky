@@ -9,8 +9,7 @@ import { ANALYSIS_VERSION, type Analysis } from '../shared/music'
  * alone (kicks), and loudness. The tempo is the strongest lag in the flux's
  * autocorrelation, leaning toward 120 BPM; beats are then tracked through the
  * flux by dynamic programming (Ellis 2007), so a track that drifts is
- * followed. The downbeat is whichever of the four beat phases the kicks land
- * on hardest. Bars are described by loudness, bass and busyness; a section
+ * followed. Bar lines are followed through the song too (see `barLines`). Bars are described by loudness, bass and busyness; a section
  * boundary is where the bars before and after differ most, and a drop is a
  * boundary into a much more intense section.
  */
@@ -18,7 +17,7 @@ export function analyze(channels: Float32Array[], sampleRate: number): Analysis 
   const factor = Math.max(1, Math.round(sampleRate / 12000))
   const rate = sampleRate / factor
   const mono = downmix(channels, factor)
-  const frames = spectra(mono)
+  const frames = spectra(mono, rate)
   const fps = rate / HOP
   // A frame's time is the middle of its window, where an onset in it registers.
   const toMs = (frame: number) => Math.round(((frame * HOP + WIN / 2) * 1000) / rate)
@@ -31,14 +30,10 @@ export function analyze(channels: Float32Array[], sampleRate: number): Analysis 
   const beats = smooth(beatFrames).map(toMs)
   const bpm = Math.round((60 * fps * 10) / period) / 10
 
-  // The downbeat: the phase of four that the kicks hit hardest.
-  const near = (signal: Float32Array, frame: number) => Math.max(signal[frame - 1] ?? 0, signal[frame]!, signal[frame + 1] ?? 0)
-  const phases = [0, 0, 0, 0]
-  beatFrames.forEach((frame, i) => (phases[i % 4]! += near(kick, frame) + 0.25 * near(onset, frame)))
-  const downbeat = phases.indexOf(Math.max(...phases))
-
-  const { sections, drops } = structure(frames, beatFrames, downbeat, toMs, toMs(frames.count))
-  return { version: ANALYSIS_VERSION, bpm, beats, downbeat, sections, drops }
+  const high = normalize(rectify(subtractMean(frames.highFlux, Math.round(fps * 0.25))))
+  const bars = barLines(frames, beatFrames, onset, kick, high)
+  const { sections, drops } = structure(frames, beatFrames, bars, toMs, toMs(frames.count))
+  return { version: ANALYSIS_VERSION, bpm, beats, bars, sections, drops }
 }
 
 const WIN = 1024
@@ -65,23 +60,35 @@ interface Frames {
   count: number
   flux: Float32Array
   lowFlux: Float32Array
+  /** Flux above the bass: snares, claps, hats. */
+  highFlux: Float32Array
+  /** Twelve pitch-class energies per frame, for when the chords change. */
+  chroma: Float32Array
   /** Loudness in dB, and bass energy in dB. */
   loud: Float32Array
   bass: Float32Array
 }
 
-function spectra(signal: Float32Array): Frames {
+function spectra(signal: Float32Array, rate: number): Frames {
   const count = Math.max(0, Math.floor((signal.length - WIN) / HOP))
   const flux = new Float32Array(count)
   const lowFlux = new Float32Array(count)
   const loud = new Float32Array(count)
   const bass = new Float32Array(count)
+  const highFlux = new Float32Array(count)
+  const chroma = new Float32Array(count * 12)
   const window = new Float32Array(WIN).map((_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / WIN))
   const fft = new FFT(WIN)
   const re = new Float32Array(WIN)
   const im = new Float32Array(WIN)
   let previous = new Float32Array(WIN / 2)
   let current = new Float32Array(WIN / 2)
+
+  // Which pitch class each bin belongs to, from about 60 Hz to 2 kHz; -1 outside.
+  const pitchClass = new Int8Array(WIN / 2).map((_, k) => {
+    const hz = (k * rate) / WIN
+    return hz < 60 || hz > 2000 ? -1 : (((Math.round(12 * Math.log2(hz / 440)) % 12) + 12) % 12)
+  })
 
   for (let f = 0; f < count; f++) {
     const offset = f * HOP
@@ -105,14 +112,17 @@ function spectra(signal: Float32Array): Frames {
         if (k <= BASS_BINS) low += rise
       }
       if (k <= BASS_BINS) bassPower += magnitude * magnitude
+      const pc = pitchClass[k]!
+      if (pc >= 0) chroma[f * 12 + pc]! += magnitude
     }
     flux[f] = all
     lowFlux[f] = low
+    highFlux[f] = all - low
     loud[f] = 10 * Math.log10(power / WIN + 1e-10)
     bass[f] = 10 * Math.log10(bassPower + 1e-10)
     ;[previous, current] = [current, previous]
   }
-  return { count, flux, lowFlux, loud, bass }
+  return { count, flux, lowFlux, highFlux, chroma, loud, bass }
 }
 
 /** In-place radix-2 FFT. */
@@ -296,11 +306,11 @@ function trackBeats(onset: Float32Array, period: number) {
   return beats.reverse()
 }
 
-function structure(frames: Frames, beats: number[], downbeat: number, toMs: (frame: number) => number, endMs: number) {
+function structure(frames: Frames, beats: number[], lines: number[], toMs: (frame: number) => number, endMs: number) {
   // Bars, and what each sounds like.
   const bars: { start: number; end: number; features: number[] }[] = []
-  for (let i = downbeat; i + 4 < beats.length; i += 4) {
-    const [from, to] = [beats[i]!, beats[i + 4]!]
+  for (let b = 0; b + 1 < lines.length; b++) {
+    const [from, to] = [beats[lines[b]!]!, beats[lines[b + 1]!]!]
     let loud = 0
     let bass = 0
     let busy = 0
@@ -370,4 +380,108 @@ function structure(frames: Frames, beats: number[], downbeat: number, toMs: (fra
   for (const { b } of candidates) if (chosen.every((c) => Math.abs(c - b) >= 8)) chosen.push(b)
   const drops = chosen.sort((x, y) => x - y).map((b) => toMs(bars[b]!.start))
   return { sections, drops }
+}
+
+/**
+ * Where the bars start: which beats are a "one". See `barCues` for what marks
+ * one, and `barPath` for how the bar line is followed through the song.
+ */
+function barLines(frames: Frames, beats: number[], onset: Float32Array, kick: Float32Array, high: Float32Array) {
+  if (beats.length < 8) return beats.map((_, i) => i).filter((i) => i % 4 === 0)
+  const { kicks, accents, backbeats, changes } = barCues(frames, beats, onset, kick, high)
+  // Weighed against the bar lines of a neural downbeat tracker (madmom) on the
+  // playlist: these land on its bar lines about 75% of the time, against 63%
+  // for the kick alone. Fitting the weights to it did no better on songs it
+  // hadn't seen; the rest is mostly beats that are off its grid to begin with.
+  return barPath(beats.map((_, i) => kicks[i]! + 0.5 * accents[i]! - 0.6 * backbeats[i]! + 1.2 * changes[i]!))
+}
+
+const BAR_SHIFT = 6
+
+/**
+ * Per beat, how much each thing that marks a bar's first beat is there, each
+ * in units of its own loud end: the kick landing (in a rock beat on 1 and 3),
+ * the beat hit harder overall, a snare or clap landing alone (they take 2
+ * and 4), and the harmony changing (chords mostly move on the bar line).
+ */
+function barCues(frames: Frames, beats: number[], onset: Float32Array, kick: Float32Array, high: Float32Array) {
+  const n = beats.length
+  const near = (signal: Float32Array, frame: number) => Math.max(signal[frame - 1] ?? 0, signal[frame]!, signal[frame + 1] ?? 0)
+  const end = (i: number) => (i >= n ? frames.count : beats[i]!)
+
+  // The mean chroma of beats [from, to), unit length, and how strong it was.
+  const harmony = (from: number, to: number) => {
+    const sum = new Float32Array(12)
+    const a = beats[Math.max(0, from)]!
+    const b = end(to)
+    for (let f = a; f < b; f++) for (let c = 0; c < 12; c++) sum[c]! += frames.chroma[f * 12 + c]!
+    let length = 0
+    for (let c = 0; c < 12; c++) length += sum[c]! * sum[c]!
+    length = Math.sqrt(length)
+    return { chord: sum.map((x) => x / (length || 1)), strength: length / Math.max(1, b - a) }
+  }
+  // How far the harmony moves across each beat, `width` beats either side.
+  // Quiet stretches count for less: there the "chord" is mostly noise.
+  const moves = (width: number) => {
+    const raw = beats.map((_, i) => {
+      if (i < width || i + width > n) return { change: 0, strength: 0 }
+      const [before, after] = [harmony(i - width, i), harmony(i, i + width)]
+      let dot = 0
+      for (let c = 0; c < 12; c++) dot += before.chord[c]! * after.chord[c]!
+      return { change: 1 - dot, strength: Math.min(before.strength, after.strength) }
+    })
+    const loudest = raw.map((m) => m.strength).sort((a, b) => a - b)[Math.floor(n * 0.9)] || 1
+    return raw.map((m) => m.change * Math.min(1, m.strength / loudest) ** 2)
+  }
+  // Not centred: a constant would reward every path alike, and a cue's quiet
+  // stretches should count for little, not be blown up to the loud ones' size.
+  const z = (values: number[]) => {
+    const scale = [...values].sort((a, b) => a - b)[Math.floor(values.length * 0.9)] || 1
+    return values.map((x) => x / scale)
+  }
+  const kicks = z(beats.map((f) => near(kick, f)))
+  return {
+    kicks,
+    accents: z(beats.map((f) => near(onset, f))),
+    // A backbeat is a hit up top with no kick under it; a crash on the one has both.
+    backbeats: z(beats.map((f, i) => near(high, f) * Math.max(0, 1 - kicks[i]!))),
+    changes: z(moves(2)),
+  }
+}
+
+/**
+ * Follow the bar position (1, 2, 3 or 4) beat by beat, given how much each
+ * beat sounds like a one: a Viterbi path where moving on by one is free and
+ * anything else costs `BAR_SHIFT`. So a song whose bar line shifts (a beat
+ * dropped by the tracker, a 2/4 bar in a bridge) is followed through it, but
+ * only on sustained evidence.
+ */
+function barPath(one: number[]) {
+  const n = one.length
+  let score = [0, 0, 0, 0]
+  const from: Int8Array[] = []
+  for (let i = 0; i < n; i++) {
+    const next = [0, 0, 0, 0]
+    const back = new Int8Array(4)
+    for (let p = 0; p < 4; p++) {
+      let best = -Infinity
+      for (let q = 0; q < 4; q++) {
+        const value = score[q]! - (i > 0 && (q + 1) % 4 !== p ? BAR_SHIFT : 0)
+        if (value > best) {
+          best = value
+          back[p] = q
+        }
+      }
+      next[p] = best + (p === 0 ? one[i]! : 0)
+    }
+    score = next
+    from.push(back)
+  }
+  let p = score.indexOf(Math.max(...score))
+  const position = new Int8Array(n)
+  for (let i = n - 1; i >= 0; i--) {
+    position[i] = p
+    p = from[i]![p]!
+  }
+  return one.map((_, i) => i).filter((i) => position[i] === 0)
 }

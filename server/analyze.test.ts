@@ -52,7 +52,7 @@ test('finds the tempo, beats, downbeats and the drop in a synthetic track', () =
 })
 
 test('beat queries', () => {
-  const analysis = { version: ANALYSIS_VERSION, bpm: 120, beats: [0, 500, 1000, 1500, 2000, 2500], downbeat: 1, sections: [], drops: [] }
+  const analysis = { version: ANALYSIS_VERSION, bpm: 120, beats: [0, 500, 1000, 1500, 2000, 2500], bars: [1, 5], sections: [], drops: [] }
   expect(beatIndex(analysis, -1)).toBe(-1)
   expect(beatIndex(analysis, 1200)).toBe(2)
   expect(nextBeat(analysis, 1200)).toEqual({ index: 3, at: 1500 })

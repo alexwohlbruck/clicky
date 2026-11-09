@@ -7,8 +7,8 @@ export interface Analysis {
   bpm: number
   /** Every beat, in order. */
   beats: number[]
-  /** Which beats start a bar: `beats[downbeat]`, `beats[downbeat + 4]`, … */
-  downbeat: number
+  /** Which beats start a bar, as indices into `beats`, in order. Usually four apart, but not always: the bar line is followed through the song. */
+  bars: number[]
   /** Stretches with one character, and how intense each is, 0 to 1. */
   sections: { start: number; end: number; energy: number }[]
   /** Where a quiet stretch breaks into a loud one. */
@@ -16,7 +16,7 @@ export interface Analysis {
 }
 
 /** Bumped when the analysis changes, so cached ones are redone. */
-export const ANALYSIS_VERSION = 3 as const
+export const ANALYSIS_VERSION = 4 as const
 
 /** Index of the last beat at or before `ms`, or -1 before the first. */
 export function beatIndex(analysis: Analysis, ms: number) {
@@ -32,7 +32,18 @@ export function beatIndex(analysis: Analysis, ms: number) {
   return lo
 }
 
-export const isDownbeat = (analysis: Analysis, index: number) => index >= 0 && (index - analysis.downbeat) % 4 === 0
+export function isDownbeat(analysis: Analysis, index: number) {
+  const { bars } = analysis
+  let lo = 0
+  let hi = bars.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (bars[mid] === index) return true
+    if (bars[mid]! < index) lo = mid + 1
+    else hi = mid - 1
+  }
+  return false
+}
 
 /** The first beat (or downbeat) at or after `ms`, or null past the last. */
 export function nextBeat(analysis: Analysis, ms: number, downbeat = false): { index: number; at: number } | null {

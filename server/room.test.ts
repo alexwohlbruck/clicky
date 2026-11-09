@@ -210,7 +210,7 @@ describe('Room', () => {
 describe('Room timed to the music', () => {
   // 120 BPM from the top, bars starting on every fourth beat, a drop at 40 s.
   const beats = Array.from({ length: 1200 }, (_, i) => i * 500)
-  const analysis = { version: ANALYSIS_VERSION, bpm: 120, beats, downbeat: 0, sections: [], drops: [40_000] }
+  const analysis = { version: ANALYSIS_VERSION, bpm: 120, beats, bars: beats.map((_, i) => i).filter((i) => i % 4 === 0), sections: [], drops: [40_000] }
 
   function musical() {
     const room = new Room({ id: 'BEAT', public: true, tracks: () => tracks, now: 0, random: () => 0.5, music: () => analysis })
