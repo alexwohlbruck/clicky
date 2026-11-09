@@ -1,0 +1,565 @@
+import { ANALYSIS_VERSION, type Analysis, type Key } from '../shared/music'
+
+/**
+ * Listen to a decoded track and find its beats, bars, sections and drops.
+ *
+ * The signal is mixed to mono and decimated to about 12 kHz, which keeps
+ * everything that matters for rhythm. From a short-time spectrum it takes:
+ * spectral flux (how much new sound starts each frame), the same for the bass
+ * alone (kicks), and loudness. The tempo is the strongest lag in the flux's
+ * autocorrelation, leaning toward 120 BPM; beats are then tracked through the
+ * flux by dynamic programming (Ellis 2007), so a track that drifts is
+ * followed. Bar lines are followed through the song too (see `barLines`). Bars are described by loudness, bass and busyness; a section
+ * boundary is where the bars before and after differ most, and a drop is a
+ * boundary into a much more intense section.
+ */
+export function analyze(channels: Float32Array[], sampleRate: number): Analysis {
+  const factor = Math.max(1, Math.round(sampleRate / 12000))
+  const rate = sampleRate / factor
+  const mono = downmix(channels, factor)
+  const frames = spectra(mono, rate)
+  const fps = rate / HOP
+  // A frame's time is the middle of its window, where an onset in it registers.
+  const toMs = (frame: number) => Math.round(((frame * HOP + WIN / 2) * 1000) / rate)
+
+  const onset = normalize(rectify(subtractMean(frames.flux, Math.round(fps * 0.25))))
+  const kick = normalize(rectify(subtractMean(frames.lowFlux, Math.round(fps * 0.25))))
+
+  const period = tempo(onset, fps)
+  const beatFrames = trim(trackBeats(onset, period), frames.loud, period)
+  const beats = smooth(beatFrames).map(toMs)
+  const bpm = Math.round((60 * fps * 10) / period) / 10
+
+  const high = normalize(rectify(subtractMean(frames.highFlux, Math.round(fps * 0.25))))
+  const bars = barLines(frames, beatFrames, onset, kick, high)
+  const { sections, drops } = structure(frames, beatFrames, bars, toMs, toMs(frames.count))
+  return { version: ANALYSIS_VERSION, bpm, beats, bars, key: keyOf(tonality(mono, rate)), sections, drops }
+}
+
+const WIN = 1024
+const HOP = 256
+/** Bins up to about 140 Hz at 12 kHz: the kick and bass. */
+const BASS_BINS = 12
+
+function downmix(channels: Float32Array[], factor: number) {
+  const length = Math.floor(channels[0]!.length / factor)
+  const out = new Float32Array(length)
+  const scale = 1 / (factor * channels.length)
+  for (const data of channels) {
+    for (let i = 0; i < length; i++) {
+      let sum = 0
+      const from = i * factor
+      for (let j = 0; j < factor; j++) sum += data[from + j]!
+      out[i]! += sum * scale
+    }
+  }
+  return out
+}
+
+interface Frames {
+  count: number
+  flux: Float32Array
+  lowFlux: Float32Array
+  /** Flux above the bass: snares, claps, hats. */
+  highFlux: Float32Array
+  /** Twelve pitch-class energies per frame, for when the chords change. */
+  chroma: Float32Array
+  /** Loudness in dB, and bass energy in dB. */
+  loud: Float32Array
+  bass: Float32Array
+}
+
+function spectra(signal: Float32Array, rate: number): Frames {
+  const count = Math.max(0, Math.floor((signal.length - WIN) / HOP))
+  const flux = new Float32Array(count)
+  const lowFlux = new Float32Array(count)
+  const loud = new Float32Array(count)
+  const bass = new Float32Array(count)
+  const highFlux = new Float32Array(count)
+  const chroma = new Float32Array(count * 12)
+  const window = new Float32Array(WIN).map((_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / WIN))
+  const fft = new FFT(WIN)
+  const re = new Float32Array(WIN)
+  const im = new Float32Array(WIN)
+  let previous = new Float32Array(WIN / 2)
+  let current = new Float32Array(WIN / 2)
+
+  // Which pitch class each bin belongs to, from about 60 Hz to 2 kHz; -1 outside.
+  const pitchClass = new Int8Array(WIN / 2).map((_, k) => {
+    const hz = (k * rate) / WIN
+    // Counted from C: A440 is 9 semitones above it.
+    return hz < 60 || hz > 2000 ? -1 : (((Math.round(12 * Math.log2(hz / 440)) + 9) % 12) + 12) % 12
+  })
+
+  for (let f = 0; f < count; f++) {
+    const offset = f * HOP
+    let power = 0
+    for (let i = 0; i < WIN; i++) {
+      const x = signal[offset + i]!
+      power += x * x
+      re[i] = x * window[i]!
+      im[i] = 0
+    }
+    fft.transform(re, im)
+    let all = 0
+    let low = 0
+    let bassPower = 0
+    for (let k = 1; k < WIN / 2; k++) {
+      const magnitude = Math.sqrt(re[k]! * re[k]! + im[k]! * im[k]!)
+      current[k] = Math.log1p(magnitude)
+      const rise = current[k]! - previous[k]!
+      if (rise > 0) {
+        all += rise
+        if (k <= BASS_BINS) low += rise
+      }
+      if (k <= BASS_BINS) bassPower += magnitude * magnitude
+      const pc = pitchClass[k]!
+      if (pc >= 0) chroma[f * 12 + pc]! += magnitude
+    }
+    flux[f] = all
+    lowFlux[f] = low
+    highFlux[f] = all - low
+    loud[f] = 10 * Math.log10(power / WIN + 1e-10)
+    bass[f] = 10 * Math.log10(bassPower + 1e-10)
+    ;[previous, current] = [current, previous]
+  }
+  return { count, flux, lowFlux, highFlux, chroma, loud, bass }
+}
+
+/** In-place radix-2 FFT. */
+class FFT {
+  private reverse: Uint32Array
+  private cos: Float32Array
+  private sin: Float32Array
+  constructor(private size: number) {
+    const bits = Math.log2(size)
+    this.reverse = new Uint32Array(size).map((_, i) => {
+      let r = 0
+      for (let b = 0; b < bits; b++) r |= ((i >> b) & 1) << (bits - 1 - b)
+      return r
+    })
+    this.cos = new Float32Array(size / 2).map((_, i) => Math.cos((-2 * Math.PI * i) / size))
+    this.sin = new Float32Array(size / 2).map((_, i) => Math.sin((-2 * Math.PI * i) / size))
+  }
+  transform(re: Float32Array, im: Float32Array) {
+    const n = this.size
+    for (let i = 0; i < n; i++) {
+      const j = this.reverse[i]!
+      if (j > i) {
+        const r = re[i]!
+        re[i] = re[j]!
+        re[j] = r
+        const m = im[i]!
+        im[i] = im[j]!
+        im[j] = m
+      }
+    }
+    for (let size = 2; size <= n; size *= 2) {
+      const half = size / 2
+      const step = n / size
+      for (let start = 0; start < n; start += size) {
+        for (let k = 0; k < half; k++) {
+          const c = this.cos[k * step]!
+          const s = this.sin[k * step]!
+          const a = start + k
+          const b = a + half
+          const tr = re[b]! * c - im[b]! * s
+          const ti = re[b]! * s + im[b]! * c
+          re[b] = re[a]! - tr
+          im[b] = im[a]! - ti
+          re[a]! += tr
+          im[a]! += ti
+        }
+      }
+    }
+  }
+}
+
+function subtractMean(signal: Float32Array, radius: number) {
+  const out = new Float32Array(signal.length)
+  let sum = 0
+  let lo = 0
+  let hi = 0
+  for (let i = 0; i < signal.length; i++) {
+    while (hi < Math.min(signal.length, i + radius + 1)) sum += signal[hi++]!
+    while (lo < i - radius) sum -= signal[lo++]!
+    out[i] = signal[i]! - sum / (hi - lo)
+  }
+  return out
+}
+
+const rectify = (signal: Float32Array) => signal.map((x) => Math.max(0, x))
+
+function normalize(signal: Float32Array) {
+  let sum = 0
+  let squares = 0
+  for (const x of signal) {
+    sum += x
+    squares += x * x
+  }
+  const mean = sum / Math.max(1, signal.length)
+  const std = Math.sqrt(Math.max(1e-12, squares / Math.max(1, signal.length) - mean * mean))
+  return signal.map((x) => x / std)
+}
+
+/**
+ * The beat period in frames: the autocorrelation peak, weighted toward 120
+ * BPM. Each candidate also counts the correlation two and four beats on (half
+ * a bar and a bar, in four-four), which tells the real beat from a reading
+ * of it in threes that the correlation alone can prefer.
+ */
+function tempo(onset: Float32Array, fps: number) {
+  const minLag = Math.floor((60 * fps) / 200)
+  const maxLag = Math.ceil((60 * fps) / 60)
+  const scores = new Float32Array(4 * maxLag + 2)
+  for (let lag = minLag; lag <= 4 * maxLag + 1; lag++) {
+    let sum = 0
+    for (let i = 0; i + lag < onset.length; i++) sum += onset[i]! * onset[i + lag]!
+    scores[lag] = sum / (onset.length - lag)
+  }
+  let best = minLag
+  let bestWeighted = -Infinity
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    const bpm = (60 * fps) / lag
+    const metre = scores[lag]! + 0.5 * scores[2 * lag]! + 0.5 * scores[4 * lag]!
+    const weighted = metre * Math.exp(-0.5 * (Math.log2(bpm / 120) / 0.9) ** 2)
+    if (weighted > bestWeighted) {
+      bestWeighted = weighted
+      best = lag
+    }
+  }
+  // Refine between frames with a parabola through the peak.
+  const [a, b, c] = [scores[best - 1]!, scores[best]!, scores[best + 1]!]
+  const denominator = a - 2 * b + c
+  let period = best + (denominator < 0 ? (0.5 * (a - c)) / denominator : 0)
+  // Keep to a range people count along to.
+  while ((60 * fps) / period < 80) period /= 2
+  while ((60 * fps) / period > 170) period *= 2
+  return period
+}
+
+/** Drop beats carried into silence before the music starts or after it ends. */
+function trim(beats: number[], loud: Float32Array, period: number) {
+  const sorted = [...loud].sort((a, b) => a - b)
+  const floor = sorted[Math.floor(sorted.length * 0.9)]! - 45
+  const audible = (frame: number) => {
+    let peak = -Infinity
+    for (let f = Math.max(0, Math.floor(frame - period / 2)); f < Math.min(loud.length, frame + period / 2); f++) peak = Math.max(peak, loud[f]!)
+    return peak > floor
+  }
+  let from = 0
+  let to = beats.length
+  while (from < to && !audible(beats[from]!)) from++
+  while (to > from && !audible(beats[to - 1]!)) to--
+  return beats.slice(from, to)
+}
+
+/**
+ * Beats come out on whole frames, about 21 ms apart. A straight line through
+ * each beat's neighbours places it between frames, which is what ears notice.
+ */
+function smooth(beats: number[], radius = 4) {
+  return beats.map((_, i) => {
+    const from = Math.max(0, i - radius)
+    const to = Math.min(beats.length - 1, i + radius)
+    let sx = 0
+    let sy = 0
+    let sxx = 0
+    let sxy = 0
+    const n = to - from + 1
+    for (let j = from; j <= to; j++) {
+      sx += j
+      sy += beats[j]!
+      sxx += j * j
+      sxy += j * beats[j]!
+    }
+    const slope = n > 1 ? (n * sxy - sx * sy) / (n * sxx - sx * sx) : 0
+    return (sy - slope * sx) / n + slope * i
+  })
+}
+
+/** Ellis-style dynamic programming: beats that land on onsets and keep the period. */
+function trackBeats(onset: Float32Array, period: number) {
+  const n = onset.length
+  const score = new Float32Array(n)
+  const back = new Int32Array(n).fill(-1)
+  const tightness = 1000
+  for (let t = 0; t < n; t++) {
+    let best = 0
+    let from = -1
+    const lo = Math.max(0, Math.floor(t - 2 * period))
+    const hi = Math.floor(t - period / 2)
+    for (let p = lo; p <= hi; p++) {
+      const candidate = score[p]! - tightness * Math.log((t - p) / period) ** 2
+      if (candidate > best || from < 0) {
+        best = candidate
+        from = p
+      }
+    }
+    score[t] = onset[t]! + (from >= 0 ? best : 0)
+    back[t] = from
+  }
+  // End on the best-scoring frame within the last period, then walk back.
+  let end = n - 1
+  for (let t = Math.max(0, Math.floor(n - period)); t < n; t++) if (score[t]! > score[end]!) end = t
+  const beats: number[] = []
+  for (let t = end; t >= 0; t = back[t]!) beats.push(t)
+  return beats.reverse()
+}
+
+function structure(frames: Frames, beats: number[], lines: number[], toMs: (frame: number) => number, endMs: number) {
+  // Bars, and what each sounds like.
+  const bars: { start: number; end: number; features: number[] }[] = []
+  for (let b = 0; b + 1 < lines.length; b++) {
+    const [from, to] = [beats[lines[b]!]!, beats[lines[b + 1]!]!]
+    let loud = 0
+    let bass = 0
+    let busy = 0
+    for (let f = from; f < to; f++) {
+      loud += frames.loud[f]!
+      bass += frames.bass[f]!
+      busy += frames.flux[f]!
+    }
+    const length = Math.max(1, to - from)
+    bars.push({ start: from, end: to, features: [loud / length, bass / length, busy / length] })
+  }
+  if (bars.length < 8) return { sections: [{ start: 0, end: endMs, energy: 0.5 }], drops: [] }
+
+  // Standardise each feature across the track.
+  const dims = bars[0]!.features.length
+  for (let d = 0; d < dims; d++) {
+    const values = bars.map((bar) => bar.features[d]!)
+    const mean = values.reduce((a, b) => a + b, 0) / values.length
+    const std = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length) || 1
+    bars.forEach((bar) => (bar.features[d] = (bar.features[d]! - mean) / std))
+  }
+
+  // Novelty at each bar line: how different the four bars after are from the four before.
+  const W = 4
+  const novelty = bars.map((_, b) => {
+    if (b < 2 || b > bars.length - 2) return 0
+    const mean = (from: number, to: number) => {
+      const slice = bars.slice(Math.max(0, from), Math.min(bars.length, to))
+      return Array.from({ length: dims }, (_, d) => slice.reduce((a, bar) => a + bar.features[d]!, 0) / slice.length)
+    }
+    const [before, after] = [mean(b - W, b), mean(b, b + W)]
+    return Math.sqrt(before.reduce((a, x, d) => a + (x - after[d]!) ** 2, 0))
+  })
+  const average = novelty.reduce((a, b) => a + b, 0) / novelty.length
+  const boundaries: number[] = []
+  for (let b = 2; b < bars.length - 1; b++) {
+    const local = novelty.slice(Math.max(0, b - 4), b + 5)
+    if (novelty[b]! >= Math.max(...local) && novelty[b]! > average * 1.3 && (boundaries.length === 0 || b - boundaries.at(-1)! >= 8)) boundaries.push(b)
+  }
+
+  // How intense each bar is, scaled between the track's quiet and loud bars
+  // (percentiles, so a fade-out at the end doesn't squash everything else).
+  const intensity = bars.map((bar) => bar.features[0]! + bar.features[1]! + 0.5 * bar.features[2]!)
+  const ranked = [...intensity].sort((x, y) => x - y)
+  const pick = (q: number) => ranked[Math.floor(q * (ranked.length - 1))]!
+  const [lo, hi] = [pick(0.1), pick(0.95)]
+  const scaled = intensity.map((value) => Math.min(1, Math.max(0, (value - lo) / Math.max(1e-6, hi - lo))))
+  const mean = (from: number, to: number) => {
+    const slice = scaled.slice(Math.max(0, from), Math.min(scaled.length, to))
+    return slice.length ? slice.reduce((x, y) => x + y, 0) / slice.length : 0
+  }
+
+  const edges = [0, ...boundaries, bars.length]
+  const sections = edges.slice(0, -1).map((from, i) => ({
+    start: i === 0 ? 0 : toMs(bars[from]!.start),
+    end: i === edges.length - 2 ? endMs : toMs(bars[edges[i + 1]!]!.start),
+    energy: Math.round(mean(from, edges[i + 1]!) * 100) / 100,
+  }))
+
+  // A drop: the next two bars jump well above the four before, into one of
+  // the track's more intense stretches. Kept eight bars apart.
+  const candidates = bars
+    .map((_, b) => ({ b, jump: mean(b, b + 2) - mean(b - 4, b), after: mean(b, b + 4) }))
+    .filter(({ b, jump, after }) => b >= 4 && jump >= 0.35 && after >= 0.6)
+    .sort((x, y) => y.jump - x.jump)
+  const chosen: number[] = []
+  for (const { b } of candidates) if (chosen.every((c) => Math.abs(c - b) >= 8)) chosen.push(b)
+  const drops = chosen.sort((x, y) => x - y).map((b) => toMs(bars[b]!.start))
+  return { sections, drops }
+}
+
+/**
+ * Where the bars start: which beats are a "one". See `barCues` for what marks
+ * one, and `barPath` for how the bar line is followed through the song.
+ */
+function barLines(frames: Frames, beats: number[], onset: Float32Array, kick: Float32Array, high: Float32Array) {
+  if (beats.length < 8) return beats.map((_, i) => i).filter((i) => i % 4 === 0)
+  const { kicks, accents, backbeats, changes } = barCues(frames, beats, onset, kick, high)
+  // Weighed against the bar lines of a neural downbeat tracker (madmom) on the
+  // playlist: these land on its bar lines about 75% of the time, against 63%
+  // for the kick alone. Fitting the weights to it did no better on songs it
+  // hadn't seen; the rest is mostly beats that are off its grid to begin with.
+  return barPath(beats.map((_, i) => kicks[i]! + 0.5 * accents[i]! - 0.6 * backbeats[i]! + 1.2 * changes[i]!))
+}
+
+const BAR_SHIFT = 6
+
+/**
+ * Per beat, how much each thing that marks a bar's first beat is there, each
+ * in units of its own loud end: the kick landing (in a rock beat on 1 and 3),
+ * the beat hit harder overall, a snare or clap landing alone (they take 2
+ * and 4), and the harmony changing (chords mostly move on the bar line).
+ */
+function barCues(frames: Frames, beats: number[], onset: Float32Array, kick: Float32Array, high: Float32Array) {
+  const n = beats.length
+  const near = (signal: Float32Array, frame: number) => Math.max(signal[frame - 1] ?? 0, signal[frame]!, signal[frame + 1] ?? 0)
+  const end = (i: number) => (i >= n ? frames.count : beats[i]!)
+
+  // The mean chroma of beats [from, to), unit length, and how strong it was.
+  const harmony = (from: number, to: number) => {
+    const sum = new Float32Array(12)
+    const a = beats[Math.max(0, from)]!
+    const b = end(to)
+    for (let f = a; f < b; f++) for (let c = 0; c < 12; c++) sum[c]! += frames.chroma[f * 12 + c]!
+    let length = 0
+    for (let c = 0; c < 12; c++) length += sum[c]! * sum[c]!
+    length = Math.sqrt(length)
+    return { chord: sum.map((x) => x / (length || 1)), strength: length / Math.max(1, b - a) }
+  }
+  // How far the harmony moves across each beat, `width` beats either side.
+  // Quiet stretches count for less: there the "chord" is mostly noise.
+  const moves = (width: number) => {
+    const raw = beats.map((_, i) => {
+      if (i < width || i + width > n) return { change: 0, strength: 0 }
+      const [before, after] = [harmony(i - width, i), harmony(i, i + width)]
+      let dot = 0
+      for (let c = 0; c < 12; c++) dot += before.chord[c]! * after.chord[c]!
+      return { change: 1 - dot, strength: Math.min(before.strength, after.strength) }
+    })
+    const loudest = raw.map((m) => m.strength).sort((a, b) => a - b)[Math.floor(n * 0.9)] || 1
+    return raw.map((m) => m.change * Math.min(1, m.strength / loudest) ** 2)
+  }
+  // Not centred: a constant would reward every path alike, and a cue's quiet
+  // stretches should count for little, not be blown up to the loud ones' size.
+  const z = (values: number[]) => {
+    const scale = [...values].sort((a, b) => a - b)[Math.floor(values.length * 0.9)] || 1
+    return values.map((x) => x / scale)
+  }
+  const kicks = z(beats.map((f) => near(kick, f)))
+  return {
+    kicks,
+    accents: z(beats.map((f) => near(onset, f))),
+    // A backbeat is a hit up top with no kick under it; a crash on the one has both.
+    backbeats: z(beats.map((f, i) => near(high, f) * Math.max(0, 1 - kicks[i]!))),
+    changes: z(moves(2)),
+  }
+}
+
+/**
+ * Follow the bar position (1, 2, 3 or 4) beat by beat, given how much each
+ * beat sounds like a one: a Viterbi path where moving on by one is free and
+ * anything else costs `BAR_SHIFT`. So a song whose bar line shifts (a beat
+ * dropped by the tracker, a 2/4 bar in a bridge) is followed through it, but
+ * only on sustained evidence.
+ */
+function barPath(one: number[]) {
+  const n = one.length
+  let score = [0, 0, 0, 0]
+  const from: Int8Array[] = []
+  for (let i = 0; i < n; i++) {
+    const next = [0, 0, 0, 0]
+    const back = new Int8Array(4)
+    for (let p = 0; p < 4; p++) {
+      let best = -Infinity
+      for (let q = 0; q < 4; q++) {
+        const value = score[q]! - (i > 0 && (q + 1) % 4 !== p ? BAR_SHIFT : 0)
+        if (value > best) {
+          best = value
+          back[p] = q
+        }
+      }
+      next[p] = best + (p === 0 ? one[i]! : 0)
+    }
+    score = next
+    from.push(back)
+  }
+  let p = score.indexOf(Math.max(...score))
+  const position = new Int8Array(n)
+  for (let i = n - 1; i >= 0; i--) {
+    position[i] = p
+    p = from[i]![p]!
+  }
+  return one.map((_, i) => i).filter((i) => position[i] === 0)
+}
+
+/**
+ * How much of each pitch class there is over the whole song. A separate,
+ * finer look than the per-frame chroma: 8192-point windows (about 1.5 Hz
+ * bins at 12 kHz, under a semitone even at 50 Hz), each frame normalised so
+ * quiet passages count as much as loud ones.
+ */
+function tonality(signal: Float32Array, rate: number) {
+  const N = 8192
+  const fft = new FFT(N)
+  const re = new Float32Array(N)
+  const im = new Float32Array(N)
+  const window = new Float32Array(N).map((_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N))
+  const pitchClass = new Int8Array(N / 2).map((_, k) => {
+    const hz = (k * rate) / N
+    return hz < 50 || hz > 2000 ? -1 : (((Math.round(12 * Math.log2(hz / 440)) + 9) % 12) + 12) % 12
+  })
+  const total = new Float64Array(12)
+  const frame = new Float64Array(12)
+  for (let offset = 0; offset + N <= signal.length; offset += N / 2) {
+    for (let i = 0; i < N; i++) {
+      re[i] = signal[offset + i]! * window[i]!
+      im[i] = 0
+    }
+    fft.transform(re, im)
+    frame.fill(0)
+    let sum = 0
+    for (let k = 1; k < N / 2; k++) {
+      const magnitude = Math.sqrt(re[k]! * re[k]! + im[k]! * im[k]!)
+      sum += magnitude
+      const pc = pitchClass[k]!
+      if (pc >= 0) frame[pc]! += magnitude
+    }
+    if (sum < 1e-3) continue
+    for (let c = 0; c < 12; c++) total[c]! += frame[c]! / sum
+  }
+  return total
+}
+
+/**
+ * Albrecht and Shanahan's key profiles: how often each scale degree sounds in
+ * major and minor music, counted from a corpus. Against a neural key
+ * detector (madmom) on the playlist, these named the same key, or one
+ * sharing six of its seven notes, for 85% of songs; Krumhansl and Kessler's
+ * listening-test profiles did worse on this music.
+ */
+const MAJOR = [0.238, 0.006, 0.111, 0.006, 0.137, 0.094, 0.016, 0.214, 0.009, 0.08, 0.008, 0.081]
+const MINOR = [0.22, 0.006, 0.104, 0.123, 0.019, 0.103, 0.012, 0.214, 0.062, 0.022, 0.061, 0.052]
+
+/**
+ * The song's key: whichever of the 24 major and minor keys' profiles the
+ * song's pitch content correlates with best (Krumhansl-Schmuckler).
+ */
+export function keyOf(tonal: ArrayLike<number>): Key {
+  const correlate = (profile: number[], tonic: number) => {
+    let [sx, sy, sxx, syy, sxy] = [0, 0, 0, 0, 0]
+    for (let i = 0; i < 12; i++) {
+      const x = tonal[(tonic + i) % 12]!
+      const y = profile[i]!
+      sx += x
+      sy += y
+      sxx += x * x
+      syy += y * y
+      sxy += x * y
+    }
+    return (12 * sxy - sx * sy) / (Math.sqrt((12 * sxx - sx * sx) * (12 * syy - sy * sy)) || 1)
+  }
+  let best: Key = { tonic: 0, minor: false }
+  let score = -Infinity
+  for (let tonic = 0; tonic < 12; tonic++) {
+    for (const minor of [false, true]) {
+      const r = correlate(minor ? MINOR : MAJOR, tonic)
+      if (r > score) [score, best] = [r, { tonic, minor }]
+    }
+  }
+  return best
+}

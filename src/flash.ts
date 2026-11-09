@@ -110,6 +110,42 @@ export const GAME_OVER: Frames = {
   6200: { endFlash: true },
 }
 
+/** When a sequence's sounds should land, in ms: its strobes, its letters, its end. */
+export interface Cues {
+  strobes: { from: number; to: number; period: number }[]
+  letters: number[]
+  end: number
+}
+
+/** Read a sequence's timeline without playing it, so its sound can be scheduled ahead. */
+export function cues(frames: Frames, text: string): Cues {
+  const times = Object.keys(frames)
+    .map(Number)
+    .sort((a, b) => a - b)
+  const strobes: Cues['strobes'] = []
+  const letters: number[] = []
+  let strobe: { from: number; period: number } | null = null
+  let end = times.at(-1) ?? 0
+  for (const at of times) {
+    const frame = frames[at]!
+    if (frame.appendLetter === true) {
+      if (letters.length < text.length) letters.push(at)
+    } else if (frame.appendLetter) {
+      const { interval } = frame.appendLetter
+      for (let i = 0; letters.length < text.length; i++) letters.push(at + i * interval)
+    }
+    if (frame.flashAnimation !== undefined || frame.endFlash) {
+      if (strobe) strobes.push({ ...strobe, to: at })
+      strobe = frame.flashAnimation ? { from: at, period: frame.flashAnimation } : null
+    }
+    if (frame.endFlash) {
+      end = at
+      break
+    }
+  }
+  return { strobes, letters: letters.filter((at) => at < end), end }
+}
+
 /** What a sequence did this frame, so the effects can react to it. */
 export type FlashEvent =
   | { type: 'letter'; index: number }
