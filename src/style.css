@@ -1055,14 +1055,16 @@ button {
   height: clamp(44px, 8vh, 60px);
 }
 
+/* Equal side columns, so the target sits at the true centre whatever the
+   two scores are. */
 .scores {
   position: absolute;
   left: 20px;
   right: 20px;
   bottom: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
   gap: 12px;
 }
 .score {
@@ -1078,6 +1080,7 @@ button {
 }
 /* Black on the blue half, as in the original. */
 .score.creators {
+  justify-content: flex-end;
   color: #000;
 }
 .target {
@@ -1115,6 +1118,7 @@ button {
 .banner strong {
   font: 30px var(--display);
   letter-spacing: 0.1em;
+  margin-right: -0.1em;
   text-transform: uppercase;
 }
 .banner span {
@@ -1190,10 +1194,11 @@ body[data-flashing] #chips {
 .roster {
   flex: 1;
   min-width: 0;
-  padding: 14px 32px 0;
+  padding: 0 32px;
+  margin-bottom: var(--safe-b);
   display: flex;
   flex-wrap: wrap;
-  align-content: flex-start;
+  align-content: center;
   gap: 4px 14px;
   font-size: 20px;
   letter-spacing: 0.06em;
@@ -1259,7 +1264,7 @@ body[data-flashing] #chips {
 .results h1 {
   font: 60px/1 var(--display);
   letter-spacing: 0.08em;
-  margin-top: 6px;
+  margin: 6px -0.08em 0 0;
   text-transform: uppercase;
 }
 .results h1.creators {
@@ -1585,6 +1590,9 @@ body[data-flashing] .room > * {
   .setting {
     flex-wrap: wrap;
   }
+  .setting .segmented {
+    margin-left: auto;
+  }
   .setting-name small {
     display: none;
   }
@@ -1630,6 +1638,7 @@ body[data-flashing] .room > * {
     left: 12px;
     right: 12px;
     bottom: 12px;
+    align-items: end;
   }
   /* Label above the number so the two sides never meet. */
   .score {
@@ -1653,7 +1662,7 @@ body[data-flashing] .room > * {
   }
 
   .roster {
-    padding: 10px 12px 0;
+    padding: 0 12px;
     gap: 2px 10px;
     font-size: 15px;
   }
