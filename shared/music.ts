@@ -9,14 +9,22 @@ export interface Analysis {
   beats: number[]
   /** Which beats start a bar, as indices into `beats`, in order. Usually four apart, but not always: the bar line is followed through the song. */
   bars: number[]
+  /** The song's key. */
+  key: Key
   /** Stretches with one character, and how intense each is, 0 to 1. */
   sections: { start: number; end: number; energy: number }[]
   /** Where a quiet stretch breaks into a loud one. */
   drops: number[]
 }
 
+/** A key: its tonic as a pitch class (0 is C, 9 is A), and major or minor. */
+export interface Key {
+  tonic: number
+  minor: boolean
+}
+
 /** Bumped when the analysis changes, so cached ones are redone. */
-export const ANALYSIS_VERSION = 4 as const
+export const ANALYSIS_VERSION = 5 as const
 
 /** Index of the last beat at or before `ms`, or -1 before the first. */
 export function beatIndex(analysis: Analysis, ms: number) {

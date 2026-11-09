@@ -52,11 +52,34 @@ test('finds the tempo, beats, downbeats and the drop in a synthetic track', () =
 })
 
 test('beat queries', () => {
-  const analysis = { version: ANALYSIS_VERSION, bpm: 120, beats: [0, 500, 1000, 1500, 2000, 2500], bars: [1, 5], sections: [], drops: [] }
+  const analysis = { version: ANALYSIS_VERSION, bpm: 120, beats: [0, 500, 1000, 1500, 2000, 2500], bars: [1, 5], key: { tonic: 0, minor: false }, sections: [], drops: [] }
   expect(beatIndex(analysis, -1)).toBe(-1)
   expect(beatIndex(analysis, 1200)).toBe(2)
   expect(nextBeat(analysis, 1200)).toEqual({ index: 3, at: 1500 })
   expect(nextBeat(analysis, 1500)).toEqual({ index: 3, at: 1500 })
   expect(nextBeat(analysis, 600, true)).toEqual({ index: 5, at: 2500 })
   expect(nextBeat(analysis, 2600)).toBeNull()
+})
+
+/** Four bars of triads, I IV V I (or i iv v i), in a given key, as sine chords at 24 kHz. */
+function progression(tonic: number, minor: boolean) {
+  const rate = 24000
+  const third = minor ? 3 : 4
+  // The V chord is major in both, as it usually is in a minor key: its third leads home.
+  const chords = [0, 5, 7, 0].map((root) => [root, root + (root === 7 ? 4 : third), root + 7])
+  const data = new Float32Array(rate * 16)
+  chords.forEach((chord, bar) => {
+    for (const step of chord) {
+      const hz = 261.63 * 2 ** ((tonic + step) / 12)
+      for (let n = 0; n < rate * 4; n++) data[bar * rate * 4 + n]! += 0.2 * Math.sin((2 * Math.PI * hz * n) / rate)
+    }
+  })
+  return { data, rate }
+}
+
+test('finds the key', () => {
+  for (const [tonic, minor] of [[2, false], [9, true], [7, false], [4, true]] as const) {
+    const { data, rate } = progression(tonic, minor)
+    expect(analyze([data], rate).key).toEqual({ tonic, minor })
+  }
 })

@@ -1,12 +1,16 @@
 import type { Team, Track } from '../shared/protocol'
 import bundled from '../shared/tracks.json'
-import { beatIndex, beatLength, isDownbeat, sectionAt, type Analysis } from '../shared/music'
+import { beatIndex, beatLength, isDownbeat, sectionAt, type Analysis, type Key } from '../shared/music'
 import type { Cues } from './flash'
 
 /**
  * Music, voice lines and press sounds through one Web Audio graph. Browsers
  * only allow it to start inside a user gesture, so `unlock` is called from one.
  */
+const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11]
+const MINOR_STEPS = [0, 2, 3, 5, 7, 8, 10]
+const DEFAULT_KEY: Key = { tonic: 9, minor: false }
+
 export class Sound {
   readonly music = new Audio()
   private context: AudioContext | null = null
@@ -36,6 +40,8 @@ export class Sound {
 
   /** The current song's analysis, once the server has it. */
   analysis: Analysis | null = null
+  /** The key the sound effects play in: the song's, once it's known, A major until then. */
+  private key: Key = DEFAULT_KEY
   /** Where the playing file or stream starts in the song (ms). */
   private streamStart = 0
   private streamStartGuessed = false
@@ -264,6 +270,7 @@ export class Sound {
   private stream(track: Track, elapsedMs: number) {
     this.onTrack(track)
     this.analysis = null
+    this.key = DEFAULT_KEY
     this.kept = false
     this.lastSyncAt = 0
     this.lastBeatIndex = -1
@@ -311,6 +318,7 @@ export class Sound {
 
   private playKept(id: string, analysis: Analysis, position: () => number) {
     this.analysis = analysis
+    this.key = analysis.key ?? DEFAULT_KEY
     this.kept = true
     this.streamStart = 0
     this.lastBeatIndex = -1
@@ -580,9 +588,10 @@ export class Sound {
     if (team === 'creators') {
       const osc = context.createOscillator()
       osc.type = 'square'
-      const pitch = 300 + progress * 700
+      // Up the song's scale with the bar, chirping up an octave.
+      const pitch = this.note(Math.round(progress * 12), 4)
       osc.frequency.setValueAtTime(pitch, now)
-      osc.frequency.exponentialRampToValueAtTime(pitch * 1.9, now + 0.05)
+      osc.frequency.exponentialRampToValueAtTime(pitch * 2, now + 0.05)
       gain.gain.setValueAtTime(level * 0.5, now)
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08)
       osc.connect(gain)
@@ -620,8 +629,24 @@ export class Sound {
 
   /** The surge pickup: a two-note coin. */
   coin() {
-    this.blip(988, 0.08)
-    this.blip(1319, 0.3, 0.08)
+    this.blip(this.note(4, 5), 0.08)
+    this.blip(this.note(7, 5), 0.3, 0.08)
+  }
+
+  /**
+   * A note in the song's key: `degree` steps up its scale from the tonic (7
+   * is the octave above, negatives go down), with the tonic in octave
+   * `octave` (C4 is middle C).
+   */
+  private note(degree: number, octave = 4) {
+    const steps = this.key.minor ? MINOR_STEPS : MAJOR_STEPS
+    const semitones = steps[((degree % 7) + 7) % 7]! + 12 * Math.floor(degree / 7)
+    return 440 * 2 ** ((12 * (octave + 1) + this.key.tonic + semitones - 69) / 12)
+  }
+
+  /** The note a semitone under the tonic, in `octave`: it pulls toward home, so it's the tense one. */
+  private leading(octave: number) {
+    return this.note(0, octave) * 2 ** (-1 / 12)
   }
 
   /** One oscillator note with a pitch glide and a quick decay. */
@@ -664,58 +689,63 @@ export class Sound {
     source.stop(at + duration + 0.02)
   }
 
-  /** The countdown: three ticks climbing toward the start. */
+  /** The countdown: three ticks climbing the song's home chord toward the start. */
   countdownTick(step: number, delay: number) {
-    this.tone('square', 440 + step * 110, 440 + step * 110, delay, 0.14, 0.11)
-    this.tone('sine', 110, 55, delay, 0.18, 0.25)
+    const pitch = this.note(step * 2, 4)
+    this.tone('square', pitch, pitch, delay, 0.14, 0.11)
+    this.tone('sine', this.note(0, 2), this.note(0, 1), delay, 0.18, 0.25)
   }
 
-  /** The round starts: a bright chord over a kick, `delay` seconds from now. */
+  /** The round starts: the song's home chord, bright, over a kick, `delay` seconds from now. */
   go(delay = 0) {
-    for (const ratio of [1, 1.25, 1.5]) this.tone('square', 880 * ratio, 880 * ratio, delay, 0.35, 0.05)
+    for (const degree of [0, 2, 4]) this.tone('square', this.note(degree, 5), this.note(degree, 5), delay, 0.35, 0.05)
     this.tone('sine', 160, 40, delay, 0.3, 0.5)
     this.whoosh(300, 6000, 0.35, 0.3, Math.max(0, delay - 0.35))
   }
 
-  /** Every tenth press in a streak: an arpeggio that climbs with the streak. */
+  /** Every tenth press in a streak: an arpeggio up the song's scale, starting higher the longer the streak. */
   combo(level: number) {
-    const base = 523 * 2 ** (Math.min(level - 1, 8) / 12)
-    ;[1, 1.26, 1.5, 2].forEach((ratio, i) => this.tone('square', base * ratio, base * ratio, i * 0.035, 0.09, 0.07))
+    const from = Math.min(level - 1, 7)
+    ;[0, 2, 4, 7].forEach((step, i) => {
+      const pitch = this.note(from + step, 5)
+      this.tone('square', pitch, pitch, i * 0.035, 0.09, 0.07)
+    })
   }
 
   /** Crossing ten presses a second. */
   onFire() {
     this.whoosh(300, 4000, 0.45, 0.35)
-    this.tone('sawtooth', 220, 880, 0.05, 0.4, 0.05)
+    this.tone('sawtooth', this.note(0, 3), this.note(0, 5), 0.05, 0.4, 0.05)
   }
 
   /** Your side is about to lose: a low double thump, louder the closer it is. */
   heartbeat(danger: number) {
     const level = 0.25 + danger * 0.35
-    this.tone('sine', 90, 45, 0, 0.16, level)
-    this.tone('sine', 80, 40, 0.14, 0.14, level * 0.7)
+    const tonic = this.note(0, 2)
+    this.tone('sine', tonic, tonic / 2, 0, 0.16, level)
+    this.tone('sine', tonic * 0.9, tonic * 0.45, 0.14, 0.14, level * 0.7)
   }
 
-  /** Double time: a rising sweep, then a stab. */
+  /** Double time: a rising sweep, then a power chord on the song's tonic. */
   frenzy() {
     this.whoosh(200, 6000, 0.7, 0.4)
-    for (const ratio of [1, 1.5, 2]) this.tone('sawtooth', 330 * ratio, 330 * ratio, 0.65, 0.4, 0.05)
+    for (const degree of [0, 4, 7]) this.tone('sawtooth', this.note(degree, 4), this.note(degree, 4), 0.65, 0.4, 0.05)
   }
 
   /** A surge orb appears on the bar. */
   shimmer() {
-    ;[1568, 2093, 2637, 3136].forEach((f, i) => this.tone('sine', f, f, i * 0.05, 0.25, 0.05))
+    ;[4, 7, 9, 11].forEach((degree, i) => this.tone('sine', this.note(degree, 6), this.note(degree, 6), i * 0.05, 0.25, 0.05))
   }
 
   /** A chat message arrives. */
   chatTick() {
-    this.tone('triangle', 1760, 1760, 0, 0.06, 0.08)
-    this.tone('triangle', 2349, 2349, 0.05, 0.08, 0.06)
+    this.tone('triangle', this.note(4, 6), this.note(4, 6), 0, 0.06, 0.08)
+    this.tone('triangle', this.note(7, 6), this.note(7, 6), 0.05, 0.08, 0.06)
   }
 
   /** Someone joins (up) or leaves (down) the lobby. */
   roster(joined: boolean) {
-    const [a, b] = joined ? [659, 988] : [988, 659]
+    const [a, b] = joined ? [this.note(0, 5), this.note(4, 5)] : [this.note(4, 5), this.note(0, 5)]
     this.tone('triangle', a, a, 0, 0.09, 0.09)
     this.tone('triangle', b, b, 0.08, 0.12, 0.09)
   }
@@ -777,15 +807,15 @@ export class Sound {
   }
 
   /** A chord of saws through the drive. */
-  private stab(delay: number, root: number, ratios: number[], duration: number, level: number) {
+  private stab(delay: number, notes: number[], duration: number, level: number) {
     const context = this.context!
     const at = context.currentTime + delay
-    for (const ratio of ratios) {
+    for (const frequency of notes) {
       for (const detune of [-8, 8]) {
         const osc = context.createOscillator()
         const gain = context.createGain()
         osc.type = 'sawtooth'
-        osc.frequency.value = root * ratio
+        osc.frequency.value = frequency
         osc.detune.value = detune
         gain.gain.setValueAtTime(level, at)
         gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
@@ -801,7 +831,7 @@ export class Sound {
     this.tone('sine', 160, 30, delay, big ? 1.4 : 0.9, 0.65)
     this.tone('triangle', 90, 40, delay, 0.25, 0.45)
     this.crash(delay, big ? 1.6 : 1, 0.45, 3000)
-    this.stab(delay, 110, chord, big ? 1.4 : 0.9, 0.5)
+    this.stab(delay, chord, big ? 1.4 : 0.9, 0.5)
   }
 
   /**
@@ -861,31 +891,32 @@ export class Sound {
     const lead = context.outputLatency || context.baseLatency || 0
     const at = (ms: number) => Math.max(0, ms / 1000 - lead)
     const lost = mood === 'lost'
-    const major = [1, 1.26, 1.5, 2]
-    const diminished = [1, 1.19, 1.41, 1.68]
+    // A win hits the song's home chord; a loss, a diminished seventh on the
+    // note under the tonic, which wants to resolve home and doesn't.
+    const home = [0, 2, 4, 7].map((degree) => this.note(degree, 2))
+    const tense = [0, 3, 6, 9].map((semitones) => this.leading(2) * 2 ** (semitones / 12))
 
     this.wreckSong(cues, mood, at)
-    this.impact(0, lost ? diminished : major, gameOver)
+    this.impact(0, lost ? tense : home, gameOver)
     if (lost) this.tong(0.35)
 
     for (const [i, strobe] of cues.strobes.entries()) {
       // Under the voice, the strobe backs off so it can be heard.
       const level = (strobe.period < 60 ? 0.45 : strobe.period < 120 ? 0.36 : 0.25) * (lost && i === 0 ? 0.6 : 1)
-      this.stutter(at(strobe.from), at(strobe.to), strobe.period, level, lost ? 55 : 82)
+      this.stutter(at(strobe.from), at(strobe.to), strobe.period, level, lost ? this.leading(1) : this.note(4, 1))
       if (i > 0) {
         // A riser into a strobe change, and a drop when it lands.
         this.whoosh(300, 7000, 0.6, 0.35, Math.max(0, at(strobe.from) - 0.6))
-        this.impact(at(strobe.from), lost ? diminished : major, false)
+        this.impact(at(strobe.from), lost ? tense : home, false)
       }
     }
 
-    // One note per letter: up a major pentatonic for a win, down a minor one for a loss.
-    const up = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3]
-    const down = [2, 9 / 5, 3 / 2, 4 / 3, 6 / 5]
+    // One note per letter: up the song's scale for a win (skipping its
+    // fourth and seventh, so it rings), down it for a loss.
+    const ringing = [0, 1, 2, 4, 5]
     cues.letters.forEach((ms, i) => {
-      const scale = lost ? down : up
-      const octave = lost ? 2 ** -Math.floor(i / 5) : 2 ** Math.floor(i / 5)
-      const pitch = 330 * scale[i % 5]! * octave
+      const degree = lost ? 7 - i : ringing[i % 5]! + 7 * Math.floor(i / 5)
+      const pitch = this.note(degree, 4)
       this.tone('square', pitch, pitch, at(ms), 0.11, 0.13)
       this.tone('sine', pitch / 2, pitch / 2, at(ms), 0.15, 0.18)
     })
@@ -897,11 +928,13 @@ export class Sound {
     this.crash(end, 0.8, 0.35, 4000)
     if (!gameOver) return
     if (lost) {
-      this.tone('sawtooth', 220, 40, end, 1.8, 0.12)
-      this.tone('sawtooth', 233, 42, end, 1.8, 0.1)
+      // The tonic and the semitone above it, rubbing as they sink.
+      const tonic = this.note(0, 3)
+      this.tone('sawtooth', tonic, tonic / 5.5, end, 1.8, 0.12)
+      this.tone('sawtooth', tonic * 2 ** (1 / 12), (tonic * 2 ** (1 / 12)) / 5.5, end, 1.8, 0.1)
     } else {
-      this.stab(end, 220, major, 1.8, 0.4)
-      this.stab(end + 0.12, 440, major, 1.6, 0.25)
+      this.stab(end, [0, 2, 4, 7].map((degree) => this.note(degree, 3)), 1.8, 0.4)
+      this.stab(end + 0.12, [0, 2, 4, 7].map((degree) => this.note(degree, 4)), 1.6, 0.25)
     }
   }
 }

@@ -1,4 +1,4 @@
-import { ANALYSIS_VERSION, type Analysis } from '../shared/music'
+import { ANALYSIS_VERSION, type Analysis, type Key } from '../shared/music'
 
 /**
  * Listen to a decoded track and find its beats, bars, sections and drops.
@@ -33,7 +33,7 @@ export function analyze(channels: Float32Array[], sampleRate: number): Analysis 
   const high = normalize(rectify(subtractMean(frames.highFlux, Math.round(fps * 0.25))))
   const bars = barLines(frames, beatFrames, onset, kick, high)
   const { sections, drops } = structure(frames, beatFrames, bars, toMs, toMs(frames.count))
-  return { version: ANALYSIS_VERSION, bpm, beats, bars, sections, drops }
+  return { version: ANALYSIS_VERSION, bpm, beats, bars, key: keyOf(tonality(mono, rate)), sections, drops }
 }
 
 const WIN = 1024
@@ -87,7 +87,8 @@ function spectra(signal: Float32Array, rate: number): Frames {
   // Which pitch class each bin belongs to, from about 60 Hz to 2 kHz; -1 outside.
   const pitchClass = new Int8Array(WIN / 2).map((_, k) => {
     const hz = (k * rate) / WIN
-    return hz < 60 || hz > 2000 ? -1 : (((Math.round(12 * Math.log2(hz / 440)) % 12) + 12) % 12)
+    // Counted from C: A440 is 9 semitones above it.
+    return hz < 60 || hz > 2000 ? -1 : (((Math.round(12 * Math.log2(hz / 440)) + 9) % 12) + 12) % 12
   })
 
   for (let f = 0; f < count; f++) {
@@ -484,4 +485,81 @@ function barPath(one: number[]) {
     p = from[i]![p]!
   }
   return one.map((_, i) => i).filter((i) => position[i] === 0)
+}
+
+/**
+ * How much of each pitch class there is over the whole song. A separate,
+ * finer look than the per-frame chroma: 8192-point windows (about 1.5 Hz
+ * bins at 12 kHz, under a semitone even at 50 Hz), each frame normalised so
+ * quiet passages count as much as loud ones.
+ */
+function tonality(signal: Float32Array, rate: number) {
+  const N = 8192
+  const fft = new FFT(N)
+  const re = new Float32Array(N)
+  const im = new Float32Array(N)
+  const window = new Float32Array(N).map((_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N))
+  const pitchClass = new Int8Array(N / 2).map((_, k) => {
+    const hz = (k * rate) / N
+    return hz < 50 || hz > 2000 ? -1 : (((Math.round(12 * Math.log2(hz / 440)) + 9) % 12) + 12) % 12
+  })
+  const total = new Float64Array(12)
+  const frame = new Float64Array(12)
+  for (let offset = 0; offset + N <= signal.length; offset += N / 2) {
+    for (let i = 0; i < N; i++) {
+      re[i] = signal[offset + i]! * window[i]!
+      im[i] = 0
+    }
+    fft.transform(re, im)
+    frame.fill(0)
+    let sum = 0
+    for (let k = 1; k < N / 2; k++) {
+      const magnitude = Math.sqrt(re[k]! * re[k]! + im[k]! * im[k]!)
+      sum += magnitude
+      const pc = pitchClass[k]!
+      if (pc >= 0) frame[pc]! += magnitude
+    }
+    if (sum < 1e-3) continue
+    for (let c = 0; c < 12; c++) total[c]! += frame[c]! / sum
+  }
+  return total
+}
+
+/**
+ * Albrecht and Shanahan's key profiles: how often each scale degree sounds in
+ * major and minor music, counted from a corpus. Against a neural key
+ * detector (madmom) on the playlist, these named the same key, or one
+ * sharing six of its seven notes, for 85% of songs; Krumhansl and Kessler's
+ * listening-test profiles did worse on this music.
+ */
+const MAJOR = [0.238, 0.006, 0.111, 0.006, 0.137, 0.094, 0.016, 0.214, 0.009, 0.08, 0.008, 0.081]
+const MINOR = [0.22, 0.006, 0.104, 0.123, 0.019, 0.103, 0.012, 0.214, 0.062, 0.022, 0.061, 0.052]
+
+/**
+ * The song's key: whichever of the 24 major and minor keys' profiles the
+ * song's pitch content correlates with best (Krumhansl-Schmuckler).
+ */
+export function keyOf(tonal: ArrayLike<number>): Key {
+  const correlate = (profile: number[], tonic: number) => {
+    let [sx, sy, sxx, syy, sxy] = [0, 0, 0, 0, 0]
+    for (let i = 0; i < 12; i++) {
+      const x = tonal[(tonic + i) % 12]!
+      const y = profile[i]!
+      sx += x
+      sy += y
+      sxx += x * x
+      syy += y * y
+      sxy += x * y
+    }
+    return (12 * sxy - sx * sy) / (Math.sqrt((12 * sxx - sx * sx) * (12 * syy - sy * sy)) || 1)
+  }
+  let best: Key = { tonic: 0, minor: false }
+  let score = -Infinity
+  for (let tonic = 0; tonic < 12; tonic++) {
+    for (const minor of [false, true]) {
+      const r = correlate(minor ? MINOR : MAJOR, tonic)
+      if (r > score) [score, best] = [r, { tonic, minor }]
+    }
+  }
+  return best
 }
