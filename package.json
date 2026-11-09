@@ -1,21 +1,25 @@
 {
-  "name": "clicky",
-  "version": "0.2.0",
+  "name": "clicky-2",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
   "description": "A fun multiplayer game about creation and destruction",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
-  },
-  "repository": "",
   "author": "Alex Wohlbruck <alexwohlbruck@gmail.com>",
+  "scripts": {
+    "dev": "bun run --parallel dev:server dev:web",
+    "dev:server": "bun --watch server/index.ts",
+    "dev:web": "vite",
+    "build": "tsc --noEmit && vite build",
+    "start": "NODE_ENV=production bun server/index.ts",
+    "test": "bun test"
+  },
   "dependencies": {
-    "async": "~0.2.8",
-    "bluebird": "^3.5.1",
-    "express": "~3.2.4",
-    "socket.io": "~0.9.14",
-    "spotify-web-api-node": "^2.5.0"
+    "three": "^0.187.0"
   },
   "devDependencies": {
-    "nodemon": "^1.12.1"
+    "@types/bun": "^1.4.4",
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
   }
 }

@@ -1,0 +1,341 @@
+@font-face {
+  font-family: 'Governor';
+  src:
+    url('/fonts/Governor.woff2') format('woff2'),
+    url('/fonts/Governor.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+/* Set every frame by the game loop. */
+:root {
+  /* Pixels of red/cyan split on the big type, set on #app by the game loop. */
+  --split: 0px;
+}
+
+* {
+  font-family: Governor, 'Product Sans', Arial, sans-serif;
+  font-weight: bold;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  background: #1f282d;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+}
+
+#fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#app {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* The shader paints the halves and the border; the frame only does layout. */
+.frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 20px solid transparent;
+  border-bottom: 0;
+  min-height: 0;
+}
+
+.space-between {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px;
+}
+
+.center-text-align {
+  text-align: center;
+}
+.right-text-align {
+  text-align: right;
+}
+
+.white {
+  color: white;
+}
+
+.small-text {
+  font-size: 0.8em;
+  opacity: 0.65;
+}
+
+h1 {
+  font-size: 5.5em;
+  letter-spacing: 12px;
+  color: white;
+}
+
+h2 {
+  font-size: 4em;
+  line-height: 44px;
+  letter-spacing: 12px;
+  color: white;
+}
+
+h3 {
+  font-size: 2em;
+  line-height: 22px;
+  letter-spacing: 6px;
+}
+
+h1,
+h2 {
+  text-shadow:
+    var(--split) 0 rgb(255 0 90 / 0.75),
+    calc(var(--split) * -1) 0 rgb(0 230 255 / 0.75);
+}
+
+p {
+  margin: 3px 0;
+}
+.break {
+  height: 5px;
+}
+
+.music p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+
+.icon {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-left: 4px;
+  cursor: pointer;
+  color: inherit;
+  width: 29px;
+  height: 29px;
+}
+.icon svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+.icon:hover {
+  color: white;
+}
+#mute .off,
+#mute[aria-pressed='true'] .on {
+  display: none;
+}
+#mute[aria-pressed='true'] .off {
+  display: inline;
+}
+
+.player-name {
+  width: 100%;
+  background: none;
+  border: none;
+  font-size: 4em;
+  color: white;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.player-name:focus {
+  outline: 0;
+}
+.player-name::placeholder {
+  color: white;
+  opacity: 1;
+}
+
+/* Reserves the band the shader draws: 10px of white around a 40px fill. */
+.bar {
+  height: 60px;
+}
+
+#call {
+  text-transform: uppercase;
+}
+
+.players {
+  padding: 0;
+  flex-shrink: 0;
+}
+.players .destroyers,
+.players .creators {
+  color: white;
+  font-size: 1.5em;
+  flex: 1;
+  min-width: 0;
+}
+.players .destroyers {
+  padding: 20px 0 0 40px;
+}
+.players .creators {
+  padding: 20px 40px 0 0;
+  text-align: right;
+}
+.players p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.players .me {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.players .bot {
+  opacity: 0.55;
+}
+
+.title {
+  background-color: white;
+  padding: 20px 35px 15px 40px;
+  flex-shrink: 0;
+}
+.title h1 {
+  font-size: 5em;
+  color: black;
+  text-shadow: none;
+}
+
+/* The flash player sets the text colour against the strobe. */
+#flash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: black;
+}
+/* Laid out once at full size; the flash player scales it with transforms,
+   which the compositor handles without re-laying out 240px type. */
+#flash-text {
+  font-size: calc(15em * var(--flash-scale, 1));
+  will-change: transform;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: none;
+}
+#flash-prompt {
+  font-size: 1.5em;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  animation: blink 1.1s steps(2, start) infinite;
+}
+
+#flash-warning {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - 40px));
+  font-size: 0.9em;
+  line-height: 1.5;
+  letter-spacing: 2px;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* While the flash runs, the game sits under the strobe. */
+#app[data-screen='intro'] .frame > *,
+#app[data-screen='intro'] .players,
+#app[data-flashing] .frame > *,
+#app[data-flashing] .players {
+  visibility: hidden;
+}
+
+@media (max-width: 900px), (max-height: 560px) {
+  body {
+    font-size: 11px;
+  }
+  h1 {
+    letter-spacing: 6px;
+  }
+  h2 {
+    font-size: 3.4em;
+    line-height: 1;
+    letter-spacing: 6px;
+  }
+  h3 {
+    letter-spacing: 3px;
+  }
+  .frame {
+    border-width: 10px;
+  }
+  .space-between {
+    padding: 12px;
+  }
+  .players .destroyers {
+    padding: 14px 0 0 16px;
+  }
+  .players .creators {
+    padding: 14px 16px 0 0;
+  }
+  .title {
+    padding: 12px 18px 8px 22px;
+  }
+  .title h1 {
+    font-size: 3.4em;
+  }
+  .player-name {
+    font-size: 3.2em;
+  }
+  #flash-text {
+    white-space: normal;
+  }
+  .bar {
+    height: 50px;
+  }
+}
+
+/* Without WebGPU or WebGL2, fall back to the original flat look. */
+.no-fx body {
+  background: #1f282d;
+}
+.no-fx .frame {
+  border-color: #1f282d;
+  background: linear-gradient(to right, #37474f 50%, #0091ea 50%);
+}
+.no-fx .bar {
+  background: #fff;
+}
