@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { Flash, INTRO, type FlashEvent } from './flash'
+import { Flash, GAME_OVER, INTRO, ROUND_OVER, cues, type FlashEvent, type Frames } from './flash'
 
 const fakeElement = () => ({ textContent: '', style: {} as Record<string, string> }) as unknown as HTMLElement
 
@@ -55,4 +55,28 @@ test('the letters type out with no effects, and the intensity only climbs from t
     previous = introIntensity(ms)
   }
   expect(introIntensity(8000)).toBe(1)
+})
+
+test('the sound cues match what the flash player does', () => {
+  for (const [frames, text] of [
+    [ROUND_OVER, 'Point to builders'],
+    [GAME_OVER, 'destroyers win'],
+  ] as [Frames, string][]) {
+    const letters: number[] = []
+    const toggles: number[] = []
+    let end = -1
+    let now = 0
+    const flash = new Flash(frames, text, fakeElement(), (event) => {
+      if (event.type === 'letter') letters.push(now)
+      if (event.type === 'toggle') toggles.push(now)
+      if (event.type === 'end') end = now
+    })
+    for (now = 0; !flash.done && now < 10_000; now += 1) flash.update(now)
+
+    const plan = cues(frames, text)
+    expect(plan.letters).toEqual(letters)
+    expect(plan.end).toBe(end)
+    const expected = plan.strobes.flatMap(({ from, to, period }) => Array.from({ length: Math.ceil((to - from) / period) }, (_, i) => from + i * period))
+    expect(expected).toEqual(toggles)
+  }
 })

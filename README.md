@@ -2,7 +2,7 @@
 
 To destroy or not to destroy - that is the question.
 
-A rebuild of [Clicky](https://github.com/alexwohlbruck/clicky) (2017): two teams, one bar, a spacebar each. Creators fill the bar, destroyers empty it. Reach the edge to take the round; first to five rounds wins.
+A rebuild of [Clicky](https://github.com/alexwohlbruck/clicky) (2017): two teams, one bar, a spacebar each. Builders fill the bar, destroyers empty it. Reach the edge to take the round; first to five rounds wins.
 
 Same layout and type as the original, with a WebGPU layer underneath for the chaos: the halves fight over territory as the bar moves, presses throw sparks and debris, a losing half falls apart, and round wins land with a shockwave and confetti. The intro keeps the original keyframes, timed to the original music.
 

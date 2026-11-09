@@ -14,12 +14,15 @@
     "test": "bun test"
   },
   "dependencies": {
-    "three": "^0.187.0"
+    "mpg123-decoder": "^1.0.3"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",
     "@types/three": "^0.187.0",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "three": "^0.187.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vue": "^3.5.44"
   }
 }

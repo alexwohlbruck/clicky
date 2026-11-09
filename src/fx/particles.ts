@@ -25,7 +25,7 @@ const COUNT = 16384
 const BURSTS = 8
 
 export enum Kind {
-  /** Creator presses: hot pink and blue sparks that glow. */
+  /** Builder presses: accent and builder-coloured sparks that glow. */
   Spark = 0,
   /** Destroyer presses: chunks that break off and fall. */
   Debris = 1,
@@ -196,13 +196,13 @@ export class Particles {
 
 /** Colour for a new particle. `pick` chooses within the kind's palette. */
 function palette(kind: any, pick: any, glow: any) {
-  const { pink, blue, white, charcoal, dark } = PALETTE
+  const { creators, destroyers, accent, white, frame } = PALETTE
   // Spark colours are pushed past 1 so they bloom.
-  const spark = mix(mix(pink, blue, step(0.55, pick)), white, step(0.85, pick)).mul(glow.mul(1.5).add(1.6))
-  const debris = mix(mix(charcoal, dark, step(0.5, pick)), white, step(0.82, pick))
-  const confettiC = mix(mix(blue, pink, step(0.45, pick)), white, step(0.8, pick))
-  const confettiD = mix(mix(charcoal, pink, step(0.5, pick)), white, step(0.75, pick))
-  const shard = mix(pink, dark, step(0.6, pick))
+  const spark = mix(mix(accent, creators, step(0.55, pick)), white, step(0.85, pick)).mul(glow.mul(1.5).add(1.6))
+  const debris = mix(mix(destroyers, frame, step(0.5, pick)), white, step(0.82, pick))
+  const confettiC = mix(mix(creators, accent, step(0.45, pick)), white, step(0.8, pick))
+  const confettiD = mix(mix(destroyers, accent, step(0.5, pick)), white, step(0.75, pick))
+  const shard = mix(accent, frame, step(0.6, pick))
 
   return select(
     kind.lessThan(0.5),
