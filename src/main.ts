@@ -1,4 +1,5 @@
 import { createApp } from 'vue'
+import './theme'
 import App from './App.vue'
 import { sound } from './game/effects'
 import { clock, state } from './game/store'

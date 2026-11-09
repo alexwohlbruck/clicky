@@ -244,7 +244,6 @@ hooks.surge = (team, at) => {
 }
 
 hooks.orb = () => sound.shimmer()
-hooks.react = () => sound.pop()
 hooks.chat = () => sound.chatTick()
 hooks.roster = (joined) => sound.roster(joined)
 

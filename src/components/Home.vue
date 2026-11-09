@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { LeaderboardEntry, RoomListing } from '../../shared/protocol'
 import { ACHIEVEMENTS } from '../game/achievements'
 import { actions, state } from '../game/store'
+import { THEMES, setTheme, theme } from '../theme'
 import Icon from './Icon.vue'
 
 const params = new URLSearchParams(location.search)
@@ -110,6 +111,29 @@ const earned = computed(() => ACHIEVEMENTS.filter((a) => state.profile.achieveme
             {{ a.icon }}
           </li>
         </ul>
+      </section>
+
+      <section class="card themes">
+        <header class="card-head">
+          <h2 class="label">Theme</h2>
+          <span class="count">{{ theme.current.name }}</span>
+        </header>
+        <div class="swatches" role="radiogroup" aria-label="Colour theme">
+          <button
+            v-for="t in THEMES"
+            :key="t.id"
+            class="swatch"
+            role="radio"
+            :aria-checked="theme.current.id === t.id"
+            :aria-label="t.name"
+            :title="t.name"
+            :style="{ '--s-creators': t.creators, '--s-destroyers': t.destroyers, '--s-bar': t.bar, '--s-frame': t.frame, '--s-accent': t.accent }"
+            @click="setTheme(t.id)"
+          >
+            <span class="swatch-field"><span class="swatch-bar" /></span>
+            <span class="swatch-name">{{ t.name }}</span>
+          </button>
+        </div>
       </section>
       </div>
 

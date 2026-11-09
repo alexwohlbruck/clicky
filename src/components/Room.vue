@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { EMOJI, TEAM_NAME, TEAM_VERB, type BotLevel, type Team } from '../../shared/protocol'
+import { TEAM_NAME, TEAM_VERB, type BotLevel, type Team } from '../../shared/protocol'
 import { display, sound } from '../game/effects'
 import { actions, state } from '../game/store'
 import Icon from './Icon.vue'
@@ -248,14 +248,8 @@ const sortedResults = computed(() => [...(results.value?.players ?? [])].sort((a
         </div>
       </Transition>
 
-      <div v-if="!spectating" class="reactions">
-        <button v-for="(e, i) in EMOJI" :key="e" :title="touch ? undefined : `Press ${i + 1}`" :aria-label="`React ${e}`" @click="actions.react(e)">{{ e }}</button>
-      </div>
     </section>
 
-    <div class="floaters">
-      <span v-for="r in state.reactions" :key="r.key" class="floater" :class="r.team" :style="{ left: `${10 + r.x * 80}%` }">{{ r.emoji }}</span>
-    </div>
 
     <!-- Rosters along the bottom, as in the original -------------------------- -->
     <footer class="players">

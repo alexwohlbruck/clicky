@@ -3,7 +3,6 @@ import { ACHIEVEMENTS, earnedByGame, type Achievement } from './achievements'
 import type {
   ChatMessage,
   ClientMessage,
-  Emoji,
   Player,
   Results,
   RoomSnapshot,
@@ -22,13 +21,6 @@ export interface Profile {
   wins: number
   presses: number
   peakPps: number
-}
-
-export interface FloatingReaction {
-  key: number
-  emoji: Emoji
-  team: Team
-  x: number
 }
 
 const PROFILE_KEY = 'clicky-profile'
@@ -54,7 +46,6 @@ export const state = reactive({
   countdownEndsAt: 0,
   /** Time between the countdown's ticks: a whole number of beats. */
   tickMs: 1000,
-  reactions: [] as FloatingReaction[],
   error: '',
   /** The latest achievement, for its toast. */
   unlocked: null as Achievement | null,
@@ -87,7 +78,6 @@ export const hooks = {
   retime: (_elapsedMs: number) => {},
   surge: (_team: Team, _at: number) => {},
   orb: () => {},
-  react: () => {},
   chat: () => {},
   roster: (_joined: boolean) => {},
 }
@@ -112,7 +102,6 @@ export function unlock(ids: string[]) {
 
 let socket: WebSocket | null = null
 let pendingJoin: ClientMessage | null = null
-let reactionKey = 0
 
 export function saveProfile() {
   localStorage.setItem(PROFILE_KEY, JSON.stringify(state.profile))
@@ -206,18 +195,9 @@ export const actions = {
   switchTeam: (team: Team) => send({ t: 'team', team }),
   start: () => send({ t: 'start' }),
   settings: (settings: Partial<Settings>) => send({ t: 'settings', settings }),
-  react: (emoji: Emoji) => send({ t: 'react', emoji }),
   skip: () => send({ t: 'skip' }),
   say: (text: string) => send({ t: 'chat', text }),
   kick: (id: string) => send({ t: 'kick', id }),
-}
-
-function float(emoji: Emoji, team: Team) {
-  const key = ++reactionKey
-  state.reactions.push({ key, emoji, team, x: Math.random() })
-  setTimeout(() => {
-    state.reactions = state.reactions.filter((r) => r.key !== key)
-  }, 2600)
 }
 
 function receive(message: ServerMessage) {
@@ -326,12 +306,6 @@ function receive(message: ServerMessage) {
       break
     }
 
-    case 'react': {
-      const player = state.room?.players.find((p) => p.id === message.id)
-      float(message.emoji, player?.team ?? 'creators')
-      hooks.react()
-      break
-    }
 
     case 'frenzy':
       state.frenzyUntil = message.active ? performance.now() + message.ms : 0

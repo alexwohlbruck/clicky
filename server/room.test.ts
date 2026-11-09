@@ -10,7 +10,7 @@ const tracks: Track[] = [
 
 function setup() {
   const finished: Results[] = []
-  const room = new Room({ id: 'TEST', public: true, tracks, now: 0, random: () => 0.5, onResults: (r) => finished.push(r) })
+  const room = new Room({ id: 'TEST', public: true, tracks: () => tracks, now: 0, random: () => 0.5, onResults: (r) => finished.push(r) })
   room.settings.frenzy = false
   const inbox = new Map<string, ServerMessage[]>()
   const join = (id: string, now = 0) => {
@@ -149,14 +149,6 @@ describe('Room', () => {
     expect(room.count).toBeLessThan(START)
   })
 
-  test('reactions are rate limited', () => {
-    const { room, inbox, join } = setup()
-    join('p1')
-    room.react('p1', '🔥', 1000)
-    room.react('p1', '🔥', 1100)
-    room.react('p1', '💀', 1500)
-    expect(inbox.get('p1')!.filter((m) => m.t === 'react')).toHaveLength(2)
-  })
   test('chat is trimmed, rate limited, and replayed to late joiners', () => {
     const { room, inbox, join } = setup()
     join('p1')
@@ -181,7 +173,7 @@ describe('Room', () => {
   })
   test('pushing the bar through a surge orb jumps it forward', () => {
     let roll = 0.9
-    const room = new Room({ id: 'ORB', public: false, tracks, now: 0, random: () => roll })
+    const room = new Room({ id: 'ORB', public: false, tracks: () => tracks, now: 0, random: () => roll })
     room.settings.frenzy = false
     const inbox: ServerMessage[] = []
     room.join('p1', 'p1', (m) => inbox.push(m), 0)
@@ -221,7 +213,7 @@ describe('Room timed to the music', () => {
   const analysis = { version: ANALYSIS_VERSION, bpm: 120, beats, downbeat: 0, sections: [], drops: [40_000] }
 
   function musical() {
-    const room = new Room({ id: 'BEAT', public: true, tracks, now: 0, random: () => 0.5, music: () => analysis })
+    const room = new Room({ id: 'BEAT', public: true, tracks: () => tracks, now: 0, random: () => 0.5, music: () => analysis })
     const inbox: ServerMessage[] = []
     room.join('p1', 'p1', (message) => inbox.push(message), 0)
     room.join('p2', 'p2', () => {}, 0)

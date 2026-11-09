@@ -1,7 +1,6 @@
 import { beatLength, dropWithin, nextBeat, type Analysis } from '../shared/music'
 import {
   DEFAULT_SETTINGS,
-  EMOJI,
   MAX,
   START,
   SURGE,
@@ -9,7 +8,6 @@ import {
   opponent,
   type BotLevel,
   type ChatMessage,
-  type Emoji,
   type Phase,
   type Player,
   type Results,
@@ -40,14 +38,14 @@ interface Seat {
   recent: number[]
   presses: number
   peakPps: number
-  lastReactAt: number
   lastChatAt: number
 }
 
 export interface RoomOptions {
   id: string
   public: boolean
-  tracks: Track[]
+  /** The playlist as it is now: it can change while a room is open. */
+  tracks: () => Track[]
   now: number
   random?: () => number
   /** Called with each finished game, for the leaderboard. */
@@ -84,8 +82,8 @@ export class Room {
   orb: number | null = null
   private orbAt = Infinity
 
-  private tracks: Track[]
-  private trackIndex: number
+  private tracks: () => Track[]
+  private track: Track
   private trackStartedAt: number
   private musicOf: (trackId: string) => Analysis | null
   private frenzyMs = FRENZY_MS
@@ -100,7 +98,8 @@ export class Room {
     this.tracks = tracks
     this.random = random
     this.onResults = onResults
-    this.trackIndex = Math.floor(random() * tracks.length)
+    const list = tracks()
+    this.track = list[Math.floor(random() * list.length)]!
     this.trackStartedAt = now
   }
 
@@ -138,7 +137,7 @@ export class Room {
 
   join(id: string, name: string, send: (message: ServerMessage) => void, now: number): Player {
     const player: Player = { id, name: name.trim().slice(0, 16) || 'Anonymous', team: this.smallerTeam() }
-    this.seats.set(id, { player, send, recent: [], presses: 0, peakPps: 0, lastReactAt: 0, lastChatAt: 0 })
+    this.seats.set(id, { player, send, recent: [], presses: 0, peakPps: 0, lastChatAt: 0 })
     this.hostId ??= id
     this.seatBot(now)
 
@@ -217,13 +216,6 @@ export class Room {
     this.move(seat.player.team, now)
   }
 
-  react(id: string, emoji: Emoji, now: number) {
-    const seat = this.seats.get(id)
-    if (!seat || !EMOJI.includes(emoji) || now - seat.lastReactAt < 400) return
-    seat.lastReactAt = now
-    this.broadcast({ t: 'react', id, emoji })
-  }
-
   say(id: string, text: string, now: number) {
     const seat = this.seats.get(id)
     const clean = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 140)
@@ -280,10 +272,6 @@ export class Room {
       this.broadcast({ t: 'state', count: this.count, presses: this.pending, tally: this.tally() })
       this.pending = { creators: 0, destroyers: 0 }
     }
-  }
-
-  private get track() {
-    return this.tracks[this.trackIndex]!
   }
 
   private move(team: Team, now: number) {
@@ -435,11 +423,9 @@ export class Room {
   }
 
   private changeTrack(now: number) {
-    if (this.tracks.length > 1) {
-      // Pick from every track but the current one.
-      const next = Math.floor(this.random() * (this.tracks.length - 1))
-      this.trackIndex = next >= this.trackIndex ? next + 1 : next
-    }
+    // Pick from every track but the current one.
+    const others = this.tracks().filter((track) => track.id !== this.track.id)
+    if (others.length) this.track = others[Math.floor(this.random() * others.length)]!
     this.trackStartedAt = now
     this.broadcast({ t: 'track', track: this.track, elapsedMs: 0, startedAt: now })
   }

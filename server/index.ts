@@ -1,9 +1,9 @@
 import { mkdir } from 'node:fs/promises'
 import { join, normalize } from 'node:path'
-import { ROOM_CAPACITY, type ClientMessage, type RoomListing, type ServerMessage, type Track } from '../shared/protocol'
-import tracks from '../shared/tracks.json'
+import { ROOM_CAPACITY, type ClientMessage, type RoomListing, type ServerMessage } from '../shared/protocol'
 import { Analyses } from './analysis'
 import { Leaderboard } from './leaderboard'
+import { Playlist } from './playlist'
 import { Room } from './room'
 
 const PORT = Number(process.env.PORT ?? (process.env.NODE_ENV === 'production' ? 3700 : 3701))
@@ -13,8 +13,6 @@ const DIST = join(ROOT, 'dist')
 const DATA = process.env.DATA_DIR ?? join(ROOT, 'data')
 const TICK_MS = 1000 / 30
 
-const playlist = tracks as Track[]
-const knownTracks = new Set(playlist.map((track) => track.id))
 const rooms = new Map<string, Room>()
 
 await mkdir(DATA, { recursive: true })
@@ -28,7 +26,9 @@ const analyses = new Analyses(DATA, (id) => {
 })
 /** What a room asks while it plays: the answer if it's ready, and work on it if not. */
 const music = (id: string) => analyses.peek(id) ?? (void analyses.get(id, true), null)
-void analyses.warm(playlist.map((track) => track.id))
+/** Synced from Spotify; new songs are analysed (and kept) as they arrive. */
+const playlist = await Playlist.open(DATA, (tracks) => void analyses.warm(tracks.map((track) => track.id)))
+void analyses.warm(playlist.tracks.map((track) => track.id))
 
 interface SocketData {
   id: string
@@ -45,7 +45,7 @@ function roomCode() {
 }
 
 function openRoom(isPublic: boolean, now: number) {
-  const room = new Room({ id: roomCode(), public: isPublic, tracks: playlist, now, music, onResults: (results) => leaderboard.record(results) })
+  const room = new Room({ id: roomCode(), public: isPublic, tracks: () => playlist.tracks, now, music, onResults: (results) => leaderboard.record(results) })
   rooms.set(room.id, room)
   return room
 }
@@ -70,7 +70,7 @@ function listings(): RoomListing[] {
  */
 async function proxyMusic(url: URL): Promise<Response> {
   const id = url.pathname.split('/').pop() ?? ''
-  if (!knownTracks.has(id)) return new Response('Unknown track', { status: 404 })
+  if (!playlist.has(id)) return new Response('Unknown track', { status: 404 })
 
   const upstream = new URL('/v1/stream', JUKEBOX_URL)
   upstream.searchParams.set('spotifyTrackId', id)
@@ -94,7 +94,7 @@ async function proxyMusic(url: URL): Promise<Response> {
  * 404 until it's been analysed; the client falls back to Jukebox's stream.
  */
 async function serveSong(id: string, request: Request): Promise<Response> {
-  const file = knownTracks.has(id) ? analyses.song(id) : null
+  const file = playlist.has(id) ? analyses.song(id) : null
   if (!file || !(await file.exists())) return new Response('Not kept yet', { status: 404 })
   const size = file.size
   const headers = { 'Content-Type': 'audio/mpeg', 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=86400' }
@@ -131,9 +131,10 @@ const server = Bun.serve<SocketData>({
     if (url.pathname.startsWith('/music/')) return proxyMusic(url)
     if (url.pathname === '/api/rooms') return Response.json(listings())
     if (url.pathname === '/api/leaderboard') return Response.json(leaderboard.top())
+    if (url.pathname === '/api/playlist') return Response.json(playlist.tracks, { headers: { 'cache-control': 'no-cache' } })
     if (url.pathname.startsWith('/api/analysis/')) {
       const id = url.pathname.split('/').pop() ?? ''
-      if (!knownTracks.has(id)) return new Response('Unknown track', { status: 404 })
+      if (!playlist.has(id)) return new Response('Unknown track', { status: 404 })
       const analysis = await analyses.get(id, true)
       // Analyses never change, so the browser can keep them.
       return analysis ? Response.json(analysis, { headers: { 'Cache-Control': 'public, max-age=86400' } }) : new Response('Not analysed', { status: 503 })
@@ -200,9 +201,6 @@ const server = Bun.serve<SocketData>({
           break
         case 'settings':
           room?.updateSettings(id, message.settings ?? {}, now)
-          break
-        case 'react':
-          room?.react(id, message.emoji, now)
           break
         case 'chat':
           room?.say(id, message.text, now)

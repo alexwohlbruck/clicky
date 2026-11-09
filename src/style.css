@@ -22,18 +22,32 @@
 }
 
 :root {
-  --charcoal: #37474f;
-  --blue: #0091ea;
-  --dark: #1f282d;
-  --pink: #e91e63;
+  /* The theme (see theme.ts, which sets these): what each colour is for.
+     Everything else is mixed from them, so a theme is only these eight. */
+  --creators: #0091ea;
+  --destroyers: #e91e63;
+  --bar: #37474f;
+  --accent: #e91e63;
+  --gold: #ffd23f;
+  --frame: #1f282d;
+  --fringe-a: #ff005a;
+  --fringe-b: #00e6ff;
 
-  --surface: rgb(12 16 19 / 0.9);
+  --dark: var(--frame);
+  --deep: color-mix(in oklab, var(--frame), black 45%);
+  --surface: color-mix(in srgb, var(--deep) 90%, transparent);
+  --accent-hi: color-mix(in oklab, var(--accent), white 18%);
+  --accent-deep: color-mix(in oklab, var(--accent), black 45%);
+  --accent-ink: color-mix(in oklab, var(--accent), white 45%);
+  --gold-deep: color-mix(in oklab, var(--gold), var(--accent) 45%);
+  --tint: color-mix(in srgb, var(--accent) 20%, transparent);
   --raised: rgb(255 255 255 / 0.05);
   --line: rgb(255 255 255 / 0.1);
   --text-2: rgb(255 255 255 / 0.66);
   --text-3: rgb(255 255 255 / 0.42);
-  --creators-ink: #4fc3ff;
-  --destroyers-ink: #b0bec5;
+  /* Each team's colour, lifted to read as text on the dark frame. */
+  --creators-ink: color-mix(in oklab, var(--creators), white 35%);
+  --destroyers-ink: color-mix(in oklab, var(--destroyers), white 45%);
 
   /* Pixel display type for the game, a monospace for menus. Governor is only the logo. */
   --display: 'Jersey 10', 'Geist Mono', ui-monospace, monospace;
@@ -43,7 +57,6 @@
   --t-m: 15px;
   --t-l: 20px;
   --t-xl: 30px;
-  --yellow: #ffd23f;
   --edge: 4px;
 
   --safe-t: env(safe-area-inset-top, 0px);
@@ -105,8 +118,44 @@ button {
 #stage {
   position: fixed;
   inset: 0;
-  /* Set by the effects loop. */
+  /* Set by the effects loop: how far the picture is fringing apart. */
   --split: 0px;
+  /* All text fringes with the picture: split into the theme's two colours,
+     a pixel apart at rest and wider as things shake. Small text splits less,
+     so it stays readable; the game's own words also glow (see .fx below). */
+  --fx-split: calc(var(--split) + 1px);
+  --fx-shadow:
+    var(--fx-split) 0 color-mix(in srgb, var(--fringe-a) 70%, transparent),
+    calc(var(--fx-split) * -1) 0 color-mix(in srgb, var(--fringe-b) 70%, transparent),
+    0 0 0.4em color-mix(in srgb, var(--fringe-a) 30%, transparent);
+  --fx-small: calc(var(--split) * 0.25 + 0.5px);
+  text-shadow:
+    var(--fx-small) 0 color-mix(in srgb, var(--fringe-a) 55%, transparent),
+    calc(var(--fx-small) * -1) 0 color-mix(in srgb, var(--fringe-b) 55%, transparent);
+}
+
+/* The game's own words, in display type: the full split, and a light leak
+   behind them, dithered (the #leak filter in index.html). */
+.hero-btn span,
+.chip,
+.wordmark,
+.room-id strong,
+.team-head h2,
+.corner,
+.call,
+.percent,
+.countdown,
+.score,
+.banner strong,
+.chip-pop,
+.players,
+.title h1,
+.results h1,
+.final,
+#flash,
+.toast.achievement strong {
+  text-shadow: var(--fx-shadow);
+  filter: url(#leak);
 }
 #stage.screen-home {
   --footer: var(--border);
@@ -179,7 +228,7 @@ button {
   content: '';
   width: 6px;
   height: 6px;
-  background: var(--pink);
+  background: var(--accent);
 }
 
 .count {
@@ -250,16 +299,16 @@ button {
   color: white;
 }
 .btn.primary {
-  background: var(--pink);
+  background: var(--accent);
   border-color: transparent;
-  box-shadow: 0 4px 0 #8e1040;
+  box-shadow: 0 4px 0 var(--accent-deep);
 }
 .btn.primary:hover:not(:disabled) {
-  background: #f33576;
+  background: var(--accent-hi);
 }
 .btn.primary:active:not(:disabled) {
   transform: translateY(4px);
-  box-shadow: 0 0 0 #8e1040;
+  box-shadow: 0 0 0 var(--accent-deep);
 }
 /* The one big call to action on a screen. */
 .hero-btn {
@@ -311,7 +360,7 @@ button {
 }
 .segmented button.on {
   background: white;
-  color: #111;
+  color: var(--frame);
 }
 .segmented button:disabled:not(.on) {
   cursor: default;
@@ -334,7 +383,7 @@ button {
   background: rgb(0 0 0 / 0.4);
   color: white;
   font: var(--t-m) var(--ui);
-  caret-color: var(--pink);
+  caret-color: var(--accent);
   outline: none;
   transition: border-color 0.12s;
 }
@@ -346,7 +395,7 @@ button {
 .field input:focus,
 .code-input:focus,
 .chat input:focus {
-  border-color: var(--pink);
+  border-color: var(--accent);
 }
 
 .chip {
@@ -407,9 +456,6 @@ button {
   /* Letter spacing trails after the last letter; pull it back so it centres. */
   margin-right: -0.1em;
   text-transform: uppercase;
-  text-shadow:
-    var(--split) 0 rgb(255 0 90 / 0.75),
-    calc(var(--split) * -1) 0 rgb(0 230 255 / 0.75);
 }
 .tagline {
   margin-top: 16px;
@@ -419,7 +465,7 @@ button {
 }
 .tagline::before {
   content: '> ';
-  color: var(--pink);
+  color: var(--accent);
 }
 /* A terminal's cursor. */
 .tagline::after {
@@ -482,7 +528,7 @@ button {
   align-items: center;
   gap: 6px;
   font: var(--t-s) var(--ui);
-  color: #69f0ae;
+  color: var(--gold);
 }
 .live i {
   width: 7px;
@@ -561,8 +607,48 @@ button {
 .achievements li.got {
   filter: none;
   opacity: 1;
-  background: rgb(255 193 7 / 0.14);
-  box-shadow: inset 0 0 0 1px rgb(255 193 7 / 0.35);
+  background: color-mix(in srgb, var(--gold) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent);
+}
+
+/* Each theme as a tiny playing field: the two halves and the bar across them. */
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 0;
+  border-radius: var(--edge);
+  background: var(--raised);
+  color: var(--text-2);
+  font: var(--t-s) var(--ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.swatch:hover {
+  color: white;
+}
+.swatch[aria-checked='true'] {
+  color: white;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.swatch-field {
+  position: relative;
+  height: 34px;
+  border: 3px solid var(--s-frame);
+  background: linear-gradient(90deg, var(--s-destroyers) 50%, var(--s-creators) 50%);
+}
+.swatch-bar {
+  position: absolute;
+  inset: 11px 0;
+  background: linear-gradient(90deg, var(--s-bar) 50%, white 50%);
 }
 
 .board-row {
@@ -578,10 +664,10 @@ button {
   background: rgb(255 255 255 / 0.025);
 }
 .board-row.first {
-  background: linear-gradient(90deg, rgb(233 30 99 / 0.28), rgb(233 30 99 / 0.04));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 28%, transparent), color-mix(in srgb, var(--accent) 4%, transparent));
 }
 .board-row.me {
-  box-shadow: inset 0 0 0 1px rgb(233 30 99 / 0.7);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 .board-row .rank {
   width: 1.4em;
@@ -654,11 +740,11 @@ button {
   border-top: 3px solid var(--team);
 }
 .team.destroyers {
-  --team: #90a4ae;
+  --team: color-mix(in oklab, var(--destroyers), white 25%);
   --team-ink: var(--destroyers-ink);
 }
 .team.creators {
-  --team: var(--blue);
+  --team: var(--creators);
   --team-ink: var(--creators-ink);
 }
 .team.mine {
@@ -703,14 +789,14 @@ button {
 }
 .host {
   flex-shrink: 0;
-  color: #ffca28;
+  color: var(--gold);
 }
 .you {
   flex-shrink: 0;
   padding: 2px 7px;
   border-radius: var(--edge);
-  background: rgb(233 30 99 / 0.2);
-  color: #ff8fb4;
+  background: var(--tint);
+  color: var(--accent-ink);
   font: var(--t-s) var(--ui);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -729,7 +815,7 @@ button {
   cursor: pointer;
 }
 .kick:hover {
-  background: rgb(233 30 99 / 0.2);
+  background: var(--tint);
   color: white;
 }
 .switch {
@@ -846,8 +932,7 @@ button {
   justify-content: center;
   pointer-events: none;
 }
-.hud button,
-.reactions {
+.hud button {
   pointer-events: auto;
 }
 .corner {
@@ -926,14 +1011,16 @@ button {
   margin: 0 6px;
 }
 .pps.fire {
-  background: linear-gradient(90deg, #ff006a, #ff9100);
+  background: linear-gradient(90deg, var(--accent), var(--gold));
   color: white;
 }
 .on-fire {
   margin-top: 8px;
-  color: #ffb74d;
+  color: var(--gold);
   letter-spacing: 0.2em;
-  text-shadow: 0 0 18px rgb(255 120 0 / 0.9);
+  text-shadow:
+    var(--fx-shadow),
+    0 0 18px color-mix(in srgb, var(--gold-deep) 90%, transparent);
   animation: flicker 0.18s steps(2) infinite;
 }
 @keyframes flicker {
@@ -951,9 +1038,6 @@ button {
   font-family: var(--display);
   line-height: 1;
   text-transform: uppercase;
-  text-shadow:
-    var(--split) 0 rgb(255 0 90 / 0.75),
-    calc(var(--split) * -1) 0 rgb(0 230 255 / 0.75);
 }
 .call {
   font-size: 90px;
@@ -1038,77 +1122,19 @@ button {
 }
 .frenzy {
   top: 16%;
-  background: linear-gradient(90deg, #ff006a, #ffb300, #00e0ff, #b400ff);
+  background: linear-gradient(90deg, var(--accent), var(--gold), var(--creators), var(--fringe-b));
   background-size: 300% 100%;
   animation: rainbow 0.8s linear infinite;
-  box-shadow: 0 10px 40px rgb(255 0 106 / 0.5);
+  box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .surge {
   bottom: 30%;
-  background: linear-gradient(180deg, #ffe082, #ffb300);
-  box-shadow: 0 0 40px rgb(255 200 0 / 0.7);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--gold), white 40%), var(--gold));
+  box-shadow: 0 0 40px color-mix(in srgb, var(--gold) 70%, transparent);
 }
 @keyframes rainbow {
   to {
     background-position: 300% 0;
-  }
-}
-
-.reactions {
-  position: absolute;
-  bottom: 76px;
-  left: 50%;
-  translate: -50% 0;
-  display: flex;
-  gap: 2px;
-  padding: 4px;
-  border-radius: var(--edge);
-  background: rgb(10 14 16 / 0.55);
-  border: 1px solid var(--line);
-}
-.reactions button {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border: 0;
-  border-radius: var(--edge);
-  background: none;
-  font-size: var(--t-l);
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-.reactions button:hover {
-  background: rgb(255 255 255 / 0.1);
-}
-.reactions button:active {
-  transform: scale(1.3);
-}
-
-.floaters {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-.floater {
-  position: absolute;
-  bottom: calc(var(--footer) + var(--safe-b) + 60px);
-  font-size: var(--t-xl);
-  animation: float-up 2.6s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
-}
-@keyframes float-up {
-  0% {
-    transform: translateY(0) scale(0.3);
-    opacity: 0;
-  }
-  12% {
-    transform: translateY(-40px) scale(1.2);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(-55vh) scale(1) rotate(12deg);
-    opacity: 0;
   }
 }
 
@@ -1134,14 +1160,14 @@ button {
   will-change: transform, opacity;
 }
 .chip-pop.creators {
-  color: var(--blue);
+  color: var(--creators);
 }
 .chip-pop.destroyers {
-  color: var(--charcoal);
+  color: var(--destroyers);
 }
 .chip-pop.big {
   padding: 6px 12px 5px;
-  background: linear-gradient(135deg, #ffd54f, #ff8f00);
+  background: linear-gradient(135deg, var(--gold), var(--gold-deep));
   color: #000;
   font-size: var(--t-l);
   text-transform: uppercase;
@@ -1216,7 +1242,7 @@ body[data-flashing] #chips {
   display: grid;
   place-items: center;
   padding: calc(16px + var(--safe-t)) 16px calc(16px + var(--safe-b));
-  background: rgb(8 11 13 / 0.68);
+  background: color-mix(in srgb, var(--deep) 68%, transparent);
 }
 .results {
   width: min(520px, 100%);
@@ -1228,7 +1254,7 @@ body[data-flashing] #chips {
   gap: 6px;
   padding: 24px;
   text-align: center;
-  background: rgb(15 20 23 / 0.95);
+  background: color-mix(in srgb, var(--deep) 95%, transparent);
 }
 .results h1 {
   font: 60px/1 var(--display);
@@ -1277,16 +1303,16 @@ body[data-flashing] #chips {
   border-top: 1px solid var(--line);
 }
 .result-list li.me {
-  background: rgb(233 30 99 / 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .result-list .avatar {
   box-shadow: 0 0 0 2px var(--team);
 }
 .result-list .creators {
-  --team: var(--blue);
+  --team: var(--creators);
 }
 .result-list .destroyers {
-  --team: #90a4ae;
+  --team: color-mix(in oklab, var(--destroyers), white 25%);
 }
 .result-list .who {
   flex: 1;
@@ -1303,8 +1329,8 @@ body[data-flashing] #chips {
 .badge {
   padding: 2px 8px;
   border-radius: var(--edge);
-  background: rgb(255 210 63 / 0.14);
-  color: var(--yellow);
+  background: color-mix(in srgb, var(--gold) 14%, transparent);
+  color: var(--gold);
   font-size: var(--t-s);
   white-space: nowrap;
 }
@@ -1374,7 +1400,7 @@ body[data-flashing] #chips {
     visibility: hidden;
   }
 }
-body[data-flashing] .room > :not(.floaters) {
+body[data-flashing] .room > * {
   visibility: hidden;
 }
 
@@ -1386,7 +1412,7 @@ body[data-flashing] .room > :not(.floaters) {
   max-width: calc(100% - 32px);
   padding: 12px 20px;
   border-radius: var(--edge);
-  background: var(--pink);
+  background: var(--accent);
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.4);
   cursor: pointer;
 }
@@ -1397,7 +1423,7 @@ body[data-flashing] .room > :not(.floaters) {
   top: auto;
   bottom: calc(var(--footer) + var(--safe-b) + 24px);
   padding: 10px 22px 10px 12px;
-  background: linear-gradient(135deg, #ffd54f, #ff8f00);
+  background: linear-gradient(135deg, var(--gold), var(--gold-deep));
   color: #000;
   white-space: nowrap;
 }
@@ -1546,7 +1572,7 @@ body[data-flashing] .room > :not(.floaters) {
     display: none;
   }
   .people li.me .who {
-    color: #ff8fb4;
+    color: var(--accent-ink);
   }
   .people .avatar {
     width: 26px;
@@ -1568,7 +1594,7 @@ body[data-flashing] .room > :not(.floaters) {
     bottom: 0;
     margin: 0 -12px -24px;
     padding: 16px 12px 12px;
-    background: linear-gradient(to bottom, transparent, rgb(20 27 31 / 0.9) 35%);
+    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--frame) 90%, transparent) 35%);
   }
   .lobby-cta .hero-btn {
     width: 100%;
@@ -1622,14 +1648,6 @@ body[data-flashing] .room > :not(.floaters) {
   .target {
     margin-bottom: 4px;
   }
-  .reactions {
-    bottom: 104px;
-  }
-  .reactions button {
-    width: 40px;
-    height: 40px;
-    font-size: var(--t-l);
-  }
   .banner strong {
     font-size: var(--t-l);
   }
@@ -1659,7 +1677,7 @@ body[data-flashing] .room > :not(.floaters) {
 
 /* Without WebGPU or WebGL2, fall back to the original flat look. */
 .no-fx #frame {
-  background: linear-gradient(to right, var(--charcoal) 50%, var(--blue) 50%);
+  background: linear-gradient(to right, var(--destroyers) 50%, var(--creators) 50%);
 }
 .no-fx #bar {
   background: white;

@@ -11,6 +11,25 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
+    <!-- The light leak behind the game's text: its glow, cut into a 4x4
+         ordered dither and split into the theme's two fringe colours, one
+         bleeding each way. Used by the display type (see .fx in style.css). -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <filter id="leak" x="-25%" y="-50%" width="150%" height="200%" color-interpolation-filters="sRGB">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="glow" />
+        <feImage href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAANUlEQVR4nGNgYGBgB+J2IFYH4uVAzHAciN2B+DkQp4MEzIF4OxCLA/F0kMB3IC4H4utAHA4A6LwH8V9kFQEAAAAASUVORK5CYII=" x="0" y="0" width="4" height="4" result="cell" />
+        <feTile in="cell" result="bayer" />
+        <feComposite in="glow" in2="bayer" operator="arithmetic" k2="1.1" k3="-1" k4="0.5" result="lit" />
+        <feComponentTransfer in="lit" result="dots"><feFuncA type="discrete" tableValues="0 1" /></feComponentTransfer>
+        <feFlood style="flood-color: var(--fringe-a)" flood-opacity="0.5" />
+        <feComposite in2="dots" operator="in" />
+        <feOffset dx="4" dy="2" result="a" />
+        <feFlood style="flood-color: var(--fringe-b)" flood-opacity="0.4" />
+        <feComposite in2="dots" operator="in" />
+        <feOffset dx="-4" dy="-2" result="b" />
+        <feMerge><feMergeNode in="a" /><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+    </svg>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -12,8 +12,6 @@ export const MAX = 100
 export const START = MAX / 2
 export const ROOM_CAPACITY = 10
 
-export const EMOJI = ['🔥', '😂', '💀', '😤', '👏', '🫡'] as const
-export type Emoji = (typeof EMOJI)[number]
 
 export type BotLevel = 'off' | 'easy' | 'normal' | 'hard'
 
@@ -123,7 +121,6 @@ export type ServerMessage =
   | { t: 'track'; track: Track; elapsedMs: number; startedAt: number }
   /** The server's clock, answering a `ping`, so timings can be read on ours. */
   | { t: 'pong'; at: number; server: number }
-  | { t: 'react'; id: string; emoji: Emoji }
   | { t: 'frenzy'; active: boolean; ms: number }
   | { t: 'chat'; message: ChatMessage }
   /** A surge orb appeared on the bar at `at` segments, or was taken by `by`. */
@@ -142,7 +139,6 @@ export type ClientMessage =
   | { t: 'team'; team: Team }
   | { t: 'start' }
   | { t: 'settings'; settings: Partial<Settings> }
-  | { t: 'react'; emoji: Emoji }
   | { t: 'chat'; text: string }
   | { t: 'kick'; id: string }
 

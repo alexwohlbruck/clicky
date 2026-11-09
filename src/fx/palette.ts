@@ -1,20 +1,30 @@
-import { color } from 'three/tsl'
+import { Color } from 'three'
+import { uniform } from 'three/tsl'
+import { onTheme } from '../theme'
 
-/** The original Clicky colours. `color()` converts them to linear space for mixing. */
-export const HEX = {
-  charcoal: 0x37474f,
-  blue: 0x0091ea,
-  dark: 0x1f282d,
-  pink: 0xe91e63,
-  white: 0xffffff,
-  black: 0x000000,
-} as const
+/**
+ * The theme's colours as shader uniforms, so the field, the bar and the
+ * particles change with it. `Color.set` converts from sRGB to the linear
+ * space the shaders mix in.
+ */
+const live = () => uniform(new Color())
 
 export const PALETTE = {
-  charcoal: color(HEX.charcoal),
-  blue: color(HEX.blue),
-  dark: color(HEX.dark),
-  pink: color(HEX.pink),
-  white: color(HEX.white),
-  black: color(HEX.black),
+  creators: live(),
+  destroyers: live(),
+  bar: live(),
+  accent: live(),
+  gold: live(),
+  frame: live(),
+  white: uniform(new Color(0xffffff)),
+  black: uniform(new Color(0x000000)),
 }
+
+onTheme((theme) => {
+  PALETTE.creators.value.set(theme.creators)
+  PALETTE.destroyers.value.set(theme.destroyers)
+  PALETTE.bar.value.set(theme.bar)
+  PALETTE.accent.value.set(theme.accent)
+  PALETTE.gold.value.set(theme.gold)
+  PALETTE.frame.value.set(theme.frame)
+})

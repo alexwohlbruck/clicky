@@ -1,5 +1,5 @@
 import type { Team, Track } from '../shared/protocol'
-import playlist from '../shared/tracks.json'
+import bundled from '../shared/tracks.json'
 import { beatIndex, beatLength, isDownbeat, sectionAt, type Analysis } from '../shared/music'
 import type { Cues } from './flash'
 
@@ -58,7 +58,14 @@ export class Sound {
   /** Once a room is choosing the music, the shuffle stops. */
   private inRoom = false
 
+  /** The playlist for the menus' shuffle: the server's synced copy once it answers. */
+  private playlist = bundled as Track[]
+
   constructor() {
+    fetch('/api/playlist')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((tracks: Track[] | null) => tracks?.length && (this.playlist = tracks))
+      .catch(() => {})
     this.music.crossOrigin = 'anonymous'
     this.music.preload = 'auto'
     // Before joining a room there's no queue to follow, so shuffle the playlist.
@@ -222,8 +229,7 @@ export class Sound {
   }
 
   private shuffle() {
-    const tracks = playlist as Track[]
-    const track = tracks[Math.floor(Math.random() * tracks.length)]!
+    const track = this.playlist[Math.floor(Math.random() * this.playlist.length)]!
     this.stream(track, 0)
   }
 
@@ -699,11 +705,6 @@ export class Sound {
   /** A surge orb appears on the bar. */
   shimmer() {
     ;[1568, 2093, 2637, 3136].forEach((f, i) => this.tone('sine', f, f, i * 0.05, 0.25, 0.05))
-  }
-
-  /** Someone reacts. */
-  pop() {
-    this.tone('sine', 600 + Math.random() * 300, 1400, 0, 0.07, 0.12)
   }
 
   /** A chat message arrives. */

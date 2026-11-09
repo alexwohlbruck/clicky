@@ -35,7 +35,7 @@ export function backgroundUniforms() {
     bar: uniform(new Vector4()),
     /** Bar fill, 0 to 1. */
     progress: uniform(0.5),
-    /** Where the charcoal half meets the blue half, 0 to 1 across the frame. */
+    /** Where the destroyers' half meets the builders', 0 to 1 across the frame. */
     boundary: uniform(0.5),
     /** 0 is calm; 1 is everyone mashing in a close game. */
     chaos: uniform(0),
@@ -71,7 +71,7 @@ const inside = (p: any, rect: any) =>
   step(rect.x, p.x).mul(step(p.x, rect.x.add(rect.z))).mul(step(rect.y, p.y)).mul(step(p.y, rect.y.add(rect.w)))
 
 export function backgroundNode(u: BackgroundUniforms) {
-  const { charcoal, blue, dark, pink, white, black } = PALETTE
+  const { creators, destroyers, bar, accent, gold, frame, white, black } = PALETTE
 
   return Fn(() => {
     const t = time
@@ -106,7 +106,7 @@ export function backgroundNode(u: BackgroundUniforms) {
       .add(mx_noise_float(vec3(p.y.mul(0.008), t.mul(1.4), 0)).mul(u.chaos.mul(0.03).add(0.004)))
     const seamX = u.boundary.add(wobble).add(nearBar.mul(u.pulseDestroyers.sub(u.pulseCreators)).mul(0.035))
     const isBlue = step(seamX, fx)
-    const half = mix(charcoal, blue, isBlue).toVar()
+    const half = mix(destroyers, creators, isBlue).toVar()
 
     // A losing half breaks up: blocks flicker and scanlines roll through it.
     const danger = mix(u.dangerDestroyers, u.dangerCreators, isBlue)
@@ -117,25 +117,27 @@ export function backgroundNode(u: BackgroundUniforms) {
     half.mulAssign(float(1).sub(scan.mul(danger).mul(0.25)))
 
     // Presses light up their own half near the bar.
-    half.addAssign(blue.mul(u.pulseCreators.mul(isBlue).mul(nearBar).mul(0.35)))
+    half.addAssign(creators.mul(u.pulseCreators.mul(isBlue).mul(nearBar).mul(0.35)))
     half.mulAssign(float(1).sub(u.pulseDestroyers.mul(isBlue.oneMinus()).mul(nearBar).mul(0.3)))
     half.mulAssign(u.beat.mul(0.08).add(1))
-    const rainbow = vec3(0, 0.33, 0.67).add(t.mul(0.9)).add(fx).add(p.y.mul(0.0015)).mul(6.2832).cos().mul(0.5).add(0.5)
+    // Frenzy washes the field through the theme's colours, in bands that run across it.
+    const wash = fract(t.mul(0.9).add(fx).add(p.y.mul(0.0015))).mul(3)
+    const rainbow = mix(mix(mix(creators, accent, wash.min(1)), gold, wash.sub(1).max(0).min(1)), creators, wash.sub(2).max(0).min(1))
     half.assign(mix(half, rainbow, u.frenzy.mul(0.45)))
 
     // In menus the halves dim toward the frame colour, keeping a hint of each team.
-    half.assign(mix(half, mix(dark, half, 0.38), u.menu))
+    half.assign(mix(half, mix(frame, half, 0.38), u.menu))
 
     const seam = exp(abs(fx.sub(seamX)).mul(u.frame.z).div(u.chaos.mul(12).add(2)).negate())
     half.addAssign(white.mul(seam.mul(u.chaos.mul(0.9).add(0.15)).mul(u.menu.mul(-0.5).add(1))))
 
-    // The bar: a white band with the pink fill running to the tip.
+    // The bar: a white band with the fill running to the tip.
     const inBand = inside(p, u.bar)
     const track = vec4(u.bar.x, u.bar.y.add(10), u.bar.z, u.bar.w.sub(20))
     const jitter = hash(floor(p.y.div(4)).add(frameTick.mul(53))).sub(0.5).mul(u.chaos).mul(22)
     const tipX = u.bar.x.add(u.bar.z.mul(u.progress))
     const filled = step(p.x, tipX.add(jitter)).mul(inside(p, track))
-    const band = mix(white, pink, filled)
+    const band = mix(white, bar, filled)
 
     const scene = mix(half, band, inBand).toVar()
 
@@ -144,7 +146,7 @@ export function backgroundNode(u: BackgroundUniforms) {
     const tipGlow = exp(abs(p.x.sub(tipX)).div(u.chaos.mul(14).add(5)).negate()).mul(
       exp(max(abs(p.y.sub(barMid)).sub(track.w.mul(0.5)), 0).div(10).negate()),
     )
-    scene.addAssign(vec3(1.4, 0.5, 0.8).mul(tipGlow).mul(u.pulseCreators.add(u.pulseDestroyers).mul(1.5).add(0.6)))
+    scene.addAssign(accent.mul(1.6).add(0.15).mul(tipGlow).mul(u.pulseCreators.add(u.pulseDestroyers).mul(1.5).add(0.6)))
     scene.addAssign(white.mul(ring.mul(0.35)))
 
     // Your presses. The bar is a hundred segments: the dividers around your
@@ -160,7 +162,7 @@ export function backgroundNode(u: BackgroundUniforms) {
     // Too fine to read on a narrow screen, so only where segments are wide enough.
     const divider = smoothstep(1.5, 0.5, toDivider).mul(inTrack).mul(smoothstep(4, 7, segment))
     scene.assign(mix(scene, scene.mul(0.6), divider.mul(nearPress).mul(fresh.mul(0.7).add(u.mine.w.mul(0.5)).min(1))))
-    const teamColor = mix(dark, blue, u.mine.z)
+    const teamColor = mix(destroyers, creators, u.mine.z)
     const nearBand = step(u.bar.y.sub(16), p.y).mul(step(p.y, u.bar.y.add(u.bar.w).add(16)))
     const notch = smoothstep(4, 2, fromPress).mul(nearBand).mul(fresh)
     scene.assign(mix(scene, teamColor, notch))
@@ -175,19 +177,19 @@ export function backgroundNode(u: BackgroundUniforms) {
     const orbRim = smoothstep(21, 19, orbDistance)
     const orbCore = smoothstep(17, 15, orbDistance)
     const orbHalo = exp(orbDistance.sub(18).max(0).div(throb.mul(10).add(10)).negate()).mul(orbRim.oneMinus())
-    scene.assign(mix(scene, dark, orbRim.mul(u.orb.y)))
-    scene.assign(mix(scene, vec3(1, 0.62, 0.05).mul(throb.mul(0.5).add(1)), orbCore.mul(u.orb.y)))
-    scene.addAssign(vec3(1, 0.6, 0.1).mul(orbHalo.mul(u.orb.y).mul(0.5)))
+    scene.assign(mix(scene, frame, orbRim.mul(u.orb.y)))
+    scene.assign(mix(scene, gold.mul(throb.mul(0.5).add(1)), orbCore.mul(u.orb.y)))
+    scene.addAssign(gold.mul(orbHalo.mul(u.orb.y).mul(0.5)))
 
-    const framed = mix(dark, scene, inFrame).toVar()
+    const framed = mix(frame, scene, inFrame).toVar()
 
     // The strobe (intro and round-over) covers everything, then gets torn up:
-    // the shock ring and glitch blocks invert it, slipped rows flash pink.
+    // the shock ring and glitch blocks invert it, slipped rows flash the accent.
     const strobe = mix(white, black, u.strobe).toVar()
     const tear = hash(floor(origin.x.div(40)).add(floor(origin.y.div(40)).mul(337)).add(frameTick.mul(4111)))
     const inverted = step(0.25, ring).max(step(float(1).sub(u.chaos.mul(0.12)), tear))
     strobe.assign(mix(strobe, strobe.oneMinus(), inverted))
-    strobe.assign(mix(strobe, pink, slip.mul(u.chaos).mul(0.9)))
+    strobe.assign(mix(strobe, accent, slip.mul(u.chaos).mul(0.9)))
     framed.assign(mix(framed, strobe, u.flash))
 
     // Film grain.
