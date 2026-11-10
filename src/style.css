@@ -467,6 +467,39 @@ button {
   content: '> ';
   color: var(--accent);
 }
+/* Who made it, under everything else. */
+.credits {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 20px;
+  padding-top: 12px;
+  font: var(--t-s) var(--ui);
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.credits a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent-ink) 40%, transparent);
+  text-underline-offset: 3px;
+}
+.credits a:hover {
+  text-decoration-color: currentColor;
+}
+.credits .coffee {
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--edge);
+  background: rgb(0 0 0 / 0.3);
+  text-decoration: none;
+}
+.credits .coffee:hover {
+  border-color: var(--accent);
+}
+
 /* A terminal's cursor. */
 .tagline::after {
   content: '_';
@@ -1508,7 +1541,7 @@ body[data-flashing] .room > * {
     grid-template-columns: minmax(0, 1fr);
     max-width: 560px;
   }
-  /* One column: play, open games, stats, leaderboard. */
+  /* One column: play, themes, open games, stats, leaderboard, credits. */
   .col {
     display: contents;
   }
@@ -1520,6 +1553,9 @@ body[data-flashing] .room > * {
   }
   .board {
     order: 3;
+  }
+  .credits {
+    order: 4;
   }
   .lobby-grid {
     grid-template-columns: minmax(0, 1fr);

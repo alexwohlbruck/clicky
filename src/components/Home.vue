@@ -178,6 +178,11 @@ const earned = computed(() => ACHIEVEMENTS.filter((a) => state.profile.achieveme
         <p v-else class="empty">Finish a game to get on the board.</p>
       </section>
       </div>
+
+      <footer class="credits">
+        <p>Made with ❤️ by <a href="https://alex.wohlbruck.com" target="_blank" rel="noopener">Alex Wohlbruck</a></p>
+        <a class="coffee" href="https://buymeacoffee.com/alexwohlbruck" target="_blank" rel="noopener">☕ Buy me a coffee</a>
+      </footer>
     </div>
   </main>
 </template>
