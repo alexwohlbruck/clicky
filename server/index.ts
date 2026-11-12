@@ -130,6 +130,12 @@ const server = Bun.serve<SocketData>({
     if (/^\/music\/\w+\/file$/.test(url.pathname)) return serveSong(url.pathname.split('/')[2]!, request)
     if (url.pathname.startsWith('/music/')) return proxyMusic(url)
     if (url.pathname === '/api/rooms') return Response.json(listings())
+    // People playing right now, private rooms included, for status pages. Just
+    // the count: the same shape Tanks! answers with.
+    if (url.pathname === '/api/online') {
+      const online = [...rooms.values()].reduce((sum, room) => sum + room.humanCount, 0)
+      return Response.json({ online }, { headers: { 'cache-control': 'no-store' } })
+    }
     if (url.pathname === '/api/leaderboard') return Response.json(leaderboard.top())
     if (url.pathname === '/api/playlist') return Response.json(playlist.tracks, { headers: { 'cache-control': 'no-cache' } })
     if (url.pathname.startsWith('/api/analysis/')) {
